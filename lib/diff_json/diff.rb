@@ -41,7 +41,10 @@ module DiffJson
 
       if old_element == new_element
         element_diff['diff_json_operation'] = 'none'
-        element_diff['diff_json_value']     = old_element
+        element_diff['diff_json_values']    = {
+          'old' => old_element,
+          'new' => nil
+        }
       else
         unless element_diff['diff_json_types']['old'] == element_diff['diff_json_types']['new']
           element_diff['diff_json_operation'] = 'replace'
@@ -115,25 +118,27 @@ module DiffJson
       # Add base diff for each index
       (0..(lal - 1)).each do |i|
         index_path = "#{base_path}[#{i}]"
+        diff[i] = {
+          'diff_json_operations' => [],
+          'diff_json_types'      => {
+            'old' => nil,
+            'new' => nil
+          },
+          'diff_json_values'     => {
+            'old' => nil,
+            'new' => nil
+          }
+        }
 
         if operations['none'].include?(i)
-          diff[i] = {
-            'diff_json_operation' => 'none',
-            'diff_json_type'      => value_type(old_array[i]),
-            'diff_json_value'     => old_array[i]
-          }
+          diff[i]['diff_json_operations'] << 'none'
+          diff[i]['diff_json_types']['old']  = value_type(old_array[i])
+          diff[i]['diff_json_values']['old'] = old_array[i]
         else
-          diff[i] = {
-            'diff_json_operations' => [],
-            'diff_json_types' => {
-              'old' => value_type(old_array[i]),
-              'new' => value_type(new_array[i])
-            },
-            'diff_json_values' => {
-              'old' => old_array[i],
-              'new' => new_array[i]
-            }
-          }
+          diff[i]['diff_json_types']['old']  = value_type(old_array[i])
+          diff[i]['diff_json_types']['new']  = value_type(new_array[i])
+          diff[i]['diff_json_values']['old'] = old_array[i]
+          diff[i]['diff_json_values']['new'] = new_array[i]
 
           # Assign current known operations to each index
           (operations.keys - ['none']).each do |operation|
@@ -181,30 +186,32 @@ module DiffJson
       # For objects, we're taking a much simpler approach, so no movements
       keys['all'].each do |k|
         key_path = "#{base_path}{#{k}}"
-        diff[k] = {}
+        diff[k] = {
+          'diff_json_operations' => [],
+          'diff_json_types'      => {
+            'old' => nil,
+            'new' => nil
+          },
+          'diff_json_values'     => {
+            'old' => nil,
+            'new' => nil
+          }
+        }
 
         if keys['common'].include?(k)
           if old_object[k] == new_object[k]
-            diff[k] = {
-              'diff_json_operation' => 'none',
-              'diff_json_type'      => value_type(old_object[k]),
-              'diff_json_value'     => old_object[k]
-            }
+            diff[k]['diff_json_operations'] << 'none'
+            diff[k]['diff_json_type']['old']  = value_type(old_object[k])
+            diff[k]['diff_json_value']['old'] = old_object[k]
           else
             if is_json_element?(old_object[k]) and is_json_element?(new_object[k])
               diff[k] = compare_elements(old_object[k], new_object[k], key_path)
             else
-              diff[k] = {
-                'diff_json_operation' => 'obj_change_value',
-                'diff_json_types' => {
-                  'old' => value_type(old_object[k]),
-                  'new' => value_type(new_object[k])
-                },
-                'diff_json_values' => {
-                  'old' => old_object[k],
-                  'new' => new_object[k]
-                }
-              }
+              diff[k]['diff_json_operations'] << 'obj_change_value'
+              diff[k]['diff_json_types']['old']  = value_type(old_object[k])
+              diff[k]['diff_json_types']['new']  = value_type(new_object[k])
+              diff[k]['diff_json_values']['old'] = old_object[k]
+              diff[k]['diff_json_values']['new'] = new_object[k]
             end
           end
         else
@@ -218,11 +225,9 @@ module DiffJson
             key_value     = old_object[k]
           end
 
-          diff[k] = {
-            'diff_json_operation' => key_operation,
-            'diff_json_type'      => key_type,
-            'diff_json_value'     => key_value
-          }
+          diff[k]['diff_json_operations'] << key_operation
+          diff[k]['diff_json_type']  = key_type
+          diff[k]['diff_json_value'] = key_value
         end
 
         diff[k]['diff_json_ignore'] = true if @opts[:skip_diff_highlight_keys].include?(k)
