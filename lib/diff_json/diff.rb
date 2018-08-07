@@ -5,10 +5,12 @@ module DiffJson
       @new_json = new_json
       # Set base options and merge user specified kwargs
       @opts = {
-        :ignore_object_keys => []
+        :skip_diff_highlight_keys  => [],
+        :skip_diff_highlight_paths => []
       }.merge(opts)
       # Diff info container
       @diff = {}
+      @diff_ct = 0
     end
 
     def calculate
@@ -27,7 +29,7 @@ module DiffJson
 
     private
 
-    def compare_elements(old_element, new_element)
+    def compare_elements(old_element, new_element, path = '$')
       element_diff = {
         'diff_json_element'   => true,
         'diff_json_operation' => nil,
@@ -49,14 +51,14 @@ module DiffJson
           }
         else
           element_diff['diff_json_operation'] = 'update'
-          element_diff.merge!(self.send("#{element_diff['diff_json_types']['old']}_diff", old_element, new_element))
+          element_diff.merge!(self.send("#{element_diff['diff_json_types']['old']}_diff", old_element, new_element, path))
         end
       end
 
       return element_diff
     end
 
-    def array_diff(old_array, new_array)
+    def array_diff(old_array, new_array, base_path)
       oal, nal   = old_array.length, new_array.length
       sal        = oal < nal ? oal : nal
       lal        = oal > nal ? oal : nal
@@ -112,6 +114,8 @@ module DiffJson
 
       # Add base diff for each index
       (0..(lal - 1)).each do |i|
+        index_path = "#{base_path}[#{i}]"
+
         if operations['none'].include?(i)
           diff[i] = {
             'diff_json_operation' => 'none',
@@ -141,7 +145,7 @@ module DiffJson
           # Assign local change operations and find diff for subelements
           if diff[i]['diff_json_operations'].empty?
             if is_json_element?(old_array[i]) and is_json_element?(new_array[i])
-              diff[i] = compare_elements(old_array, new_array)
+              diff[i] = compare_elements(old_array, new_array, index_path)
             else
               diff[i]['diff_json_operations'] << 'change_value'
             end
@@ -159,12 +163,13 @@ module DiffJson
             diff[i]['diff_json_operations'] << 'arr_drop_value'
           end
         end
+
       end
 
       return diff
     end
 
-    def object_diff(old_object, new_object)
+    def object_diff(old_object, new_object, base_path)
       keys = {
         'all'    => (old_object.keys | new_object.keys),
         'common' => (old_object.keys & new_object.keys),
@@ -175,6 +180,7 @@ module DiffJson
 
       # For objects, we're taking a much simpler approach, so no movements
       keys['all'].each do |k|
+        key_path = "#{base_path}{#{k}}"
         diff[k] = {}
 
         if keys['common'].include?(k)
@@ -186,7 +192,7 @@ module DiffJson
             }
           else
             if is_json_element?(old_object[k]) and is_json_element?(new_object[k])
-              diff[k] = compare_elements(old_object[k], new_object[k])
+              diff[k] = compare_elements(old_object[k], new_object[k], key_path)
             else
               diff[k] = {
                 'diff_json_operation' => 'obj_change_value',
@@ -219,7 +225,7 @@ module DiffJson
           }
         end
 
-        diff[k]['diff_json_ignore'] = true if @opts[:ignore_object_keys].include?(k)
+        diff[k]['diff_json_ignore'] = true if @opts[:skip_diff_highlight_keys].include?(k)
       end
 
       return diff
