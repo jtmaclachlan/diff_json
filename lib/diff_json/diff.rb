@@ -3,6 +3,11 @@ module DiffJson
     def initialize(old_json, new_json, **opts)
       @old_json = old_json
       @new_json = new_json
+      # Set base options and merge user specified kwargs
+      @opts = {
+        :ignore_object_keys => []
+      }.merge(opts)
+      # Diff info container
       @diff = {}
     end
 
@@ -20,10 +25,9 @@ module DiffJson
       end
     end
 
-    # private
+    private
 
     def compare_elements(old_element, new_element)
-      puts "Compare Elements"
       element_diff = {
         'diff_json_element'   => true,
         'diff_json_operation' => nil,
@@ -45,7 +49,6 @@ module DiffJson
           }
         else
           element_diff['diff_json_operation'] = 'update'
-          puts "Calling #{element_diff['diff_json_types']['old']}_diff"
           element_diff.merge!(self.send("#{element_diff['diff_json_types']['old']}_diff", old_element, new_element))
         end
       end
@@ -162,7 +165,6 @@ module DiffJson
     end
 
     def object_diff(old_object, new_object)
-      puts "Object Diff"
       keys = {
         'all'    => (old_object.keys | new_object.keys),
         'common' => (old_object.keys & new_object.keys),
@@ -173,7 +175,6 @@ module DiffJson
 
       # For objects, we're taking a much simpler approach, so no movements
       keys['all'].each do |k|
-        puts k
         diff[k] = {}
 
         if keys['common'].include?(k)
@@ -217,6 +218,8 @@ module DiffJson
             'diff_json_value'     => key_value
           }
         end
+
+        diff[k]['diff_json_ignore'] = true if @opts[:ignore_object_keys].include?(k)
       end
 
       return diff
