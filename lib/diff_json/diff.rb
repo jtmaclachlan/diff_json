@@ -235,16 +235,6 @@ module DiffJson
       return indices
     end
 
-    def object_keys(object, value)
-      keys = []
-
-      object.each do |k,v|
-        keys << k if v == value
-      end
-
-      return keys
-    end
-
     def is_json_element?(object)
       return true if ['array', 'object'].include?(value_type(object))
     end
