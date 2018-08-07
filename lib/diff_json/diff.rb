@@ -3,14 +3,8 @@ module DiffJson
     def initialize(old_json, new_json, **opts)
       @old_json = old_json
       @new_json = new_json
-      # Set base options and merge user specified kwargs
-      @opts = {
-        :skip_diff_highlight_keys  => [],
-        :skip_diff_highlight_paths => []
-      }.merge(opts)
       # Diff info container
       @diff = {}
-      @diff_ct = 0
     end
 
     def calculate
@@ -229,8 +223,6 @@ module DiffJson
           diff[k]['diff_json_type']  = key_type
           diff[k]['diff_json_value'] = key_value
         end
-
-        diff[k]['diff_json_ignore'] = true if @opts[:skip_diff_highlight_keys].include?(k)
       end
 
       return diff
