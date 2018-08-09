@@ -7,11 +7,9 @@ module DiffJson
       @diff = {}
     end
 
-    def calculate
-      @diff = compare_elements(@old_json, @new_json)
-    end
+    def output(output_type = :stdout)
+      calculate if @diff.empty?
 
-    def retrieve_output(output_type = :stdout)
       case output_type
       when :raw
         return JSON.pretty_generate(@diff)
@@ -23,7 +21,30 @@ module DiffJson
 
     private
 
+    def calculate
+      puts [
+        '----------------------',
+        'ENTER DIFF CALCULATION',
+        '----------------------',
+        ''
+      ]
+      @diff = compare_elements(@old_json, @new_json)
+    end
+
     def compare_elements(old_element, new_element, path = '$')
+      puts [
+        'DEBUG -- Enter compare_elements',
+        '',
+        'Old Element ->'
+      ]
+      pp(old_element)
+      puts [
+        '',
+        'New Element ->'
+      ]
+      pp(new_element)
+      puts ''
+
       element_diff = {
         'diff_json_element'   => true,
         'diff_json_operation' => nil,
@@ -37,7 +58,7 @@ module DiffJson
         element_diff['diff_json_operation'] = 'none'
         element_diff['diff_json_values']    = {
           'old' => old_element,
-          'new' => nil
+          'new' => new_element
         }
       else
         unless element_diff['diff_json_types']['old'] == element_diff['diff_json_types']['new']
@@ -56,6 +77,19 @@ module DiffJson
     end
 
     def array_diff(old_array, new_array, base_path)
+      puts [
+        'DEBUG -- Enter array_diff',
+        '',
+        'Old Array ->'
+      ]
+      pp(old_array)
+      puts [
+        '',
+        'New Array ->'
+      ]
+      pp(new_array)
+      puts ''
+
       oal, nal   = old_array.length, new_array.length
       sal        = oal < nal ? oal : nal
       lal        = oal > nal ? oal : nal
@@ -64,9 +98,6 @@ module DiffJson
         'none'             => [],
         'arr_add_index'    => [],
         'arr_drop_index'   => [],
-        'arr_change_value' => [],
-        'arr_add_value'    => [],
-        'arr_drop_value'   => [],
         'arr_send_move'    => [],
         'arr_receive_move' => []
       }
@@ -111,6 +142,11 @@ module DiffJson
 
       # Add base diff for each index
       (0..(lal - 1)).each do |i|
+        puts [
+          "DEBUG -- processing array index #{i}",
+          ''
+        ]
+
         index_path = "#{base_path}[#{i}]"
         diff[i] = {
           'diff_json_operations' => [],
@@ -124,51 +160,59 @@ module DiffJson
           }
         }
 
-        if operations['none'].include?(i)
-          diff[i]['diff_json_operations'] << 'none'
-          diff[i]['diff_json_types']['old']  = value_type(old_array[i])
-          diff[i]['diff_json_values']['old'] = old_array[i]
-        else
-          diff[i]['diff_json_types']['old']  = value_type(old_array[i])
-          diff[i]['diff_json_types']['new']  = value_type(new_array[i])
-          diff[i]['diff_json_values']['old'] = old_array[i]
-          diff[i]['diff_json_values']['new'] = new_array[i]
+        diff[i]['diff_json_types']['old']  = ((i <= old_array.length and !old_array.empty?) ? value_type(old_array[i]) : UndefinedValue.new)
+        diff[i]['diff_json_types']['new']  = ((i <= new_array.length and !new_array.empty?) ? value_type(new_array[i]) : UndefinedValue.new)
+        diff[i]['diff_json_values']['old'] = old_array[i]
+        diff[i]['diff_json_values']['new'] = new_array[i]
 
-          # Assign current known operations to each index
-          (operations.keys - ['none']).each do |operation|
-            if operations[operation].include?(i)
-              diff[i]['diff_json_operations'] << operation
-            end
-          end
-
-          # Assign local change operations and find diff for subelements
-          if diff[i]['diff_json_operations'].empty?
-            if is_json_element?(old_array[i]) and is_json_element?(new_array[i])
-              diff[i] = compare_elements(old_array, new_array, index_path)
-            else
-              diff[i]['diff_json_operations'] << 'change_value'
-            end
-          elsif (
-            diff[i]['diff_json_operations'].include?('arr_send_move') and
-            !diff[i]['diff_json_operations'].include?('arr_receive_move') and
-            !diff[i]['diff_json_operations'].include?('arr_drop_index')
-          )
-            diff[i]['diff_json_operations'] << 'arr_add_value'
-          elsif (
-            !diff[i]['diff_json_operations'].include?('arr_send_move') and
-            diff[i]['diff_json_operations'].include?('arr_receive_move') and
-            !diff[i]['diff_json_operations'].include?('arr_add_index')
-          )
-            diff[i]['diff_json_operations'] << 'arr_drop_value'
+        # Assign current known operations to each index
+        (operations.keys).each do |operation|
+          if operations[operation].include?(i)
+            diff[i]['diff_json_operations'] << operation
           end
         end
 
+        # Assign local change operations
+        if diff[i]['diff_json_operations'].empty?
+          diff[i]['diff_json_operations'] << 'arr_change_value'
+        elsif (
+          diff[i]['diff_json_operations'].include?('arr_send_move') and
+          !diff[i]['diff_json_operations'].include?('arr_receive_move') and
+          !diff[i]['diff_json_operations'].include?('arr_drop_index')
+        )
+          diff[i]['diff_json_operations'] << 'arr_add_value'
+        elsif (
+          !diff[i]['diff_json_operations'].include?('arr_send_move') and
+          diff[i]['diff_json_operations'].include?('arr_receive_move') and
+          !diff[i]['diff_json_operations'].include?('arr_add_index')
+        )
+          diff[i]['diff_json_operations'] << 'arr_drop_value'
+        end
+
+        unless (diff[i]['diff_json_operations'] & ['none', 'arr_change_value']).empty?
+          if is_json_element?(old_array[i]) and is_json_element?(new_array[i])
+            diff[i] = compare_elements(old_array[i], new_array[i])
+          end
+        end
       end
 
       return diff
     end
 
     def object_diff(old_object, new_object, base_path)
+      puts [
+        'DEBUG -- Enter object_diff',
+        '',
+        'Old Object ->'
+      ]
+      pp(old_object)
+      puts [
+        '',
+        'New Object ->'
+      ]
+      pp(new_object)
+      puts ''
+
       keys = {
         'all'    => (old_object.keys | new_object.keys),
         'common' => (old_object.keys & new_object.keys),
@@ -179,6 +223,11 @@ module DiffJson
 
       # For objects, we're taking a much simpler approach, so no movements
       keys['all'].each do |k|
+        puts [
+          "DEBUG -- processing object key #{k}",
+          ''
+        ]
+
         key_path = "#{base_path}{#{k}}"
         diff[k] = {
           'diff_json_operations' => [],
@@ -193,35 +242,32 @@ module DiffJson
         }
 
         if keys['common'].include?(k)
-          if old_object[k] == new_object[k]
-            diff[k]['diff_json_operations'] << 'none'
-            diff[k]['diff_json_type']['old']  = value_type(old_object[k])
-            diff[k]['diff_json_value']['old'] = old_object[k]
+          if is_json_element?(old_object[k]) and is_json_element?(new_object[k])
+            diff[k] = compare_elements(old_object[k], new_object[k], key_path)
           else
-            if is_json_element?(old_object[k]) and is_json_element?(new_object[k])
-              diff[k] = compare_elements(old_object[k], new_object[k], key_path)
+            if old_object[k] == new_object[k]
+              diff[k]['diff_json_operations'] << 'none'
             else
               diff[k]['diff_json_operations'] << 'obj_change_value'
-              diff[k]['diff_json_types']['old']  = value_type(old_object[k])
-              diff[k]['diff_json_types']['new']  = value_type(new_object[k])
-              diff[k]['diff_json_values']['old'] = old_object[k]
-              diff[k]['diff_json_values']['new'] = new_object[k]
             end
+
+            diff[k]['diff_json_types']['old']  = value_type(old_object[k])
+            diff[k]['diff_json_types']['new']  = value_type(new_object[k])
+            diff[k]['diff_json_values']['old'] = old_object[k]
+            diff[k]['diff_json_values']['new'] = new_object[k]
           end
         else
-          if keys['add'].include?(k)
-            key_operation = 'add_key'
-            key_type      = value_type(new_object[k])
-            key_value     = new_object[k]
+          if keys['drop'].include?(k)
+            diff[k]['diff_json_operations'] << 'obj_drop_key'
+            diff[k]['diff_json_types']['old']  = value_type(old_object[k])
+            diff[k]['diff_json_types']['new']  = UndefinedValue.new
+            diff[k]['diff_json_values']['old'] = old_object[k]
           else
-            key_operation = 'drop_key'
-            key_type      = value_type(old_object[k])
-            key_value     = old_object[k]
+            diff[k]['diff_json_operations'] << 'obj_add_key'
+            diff[k]['diff_json_types']['old']  = UndefinedValue.new
+            diff[k]['diff_json_types']['new']  = value_type(new_object[k])
+            diff[k]['diff_json_values']['new'] = new_object[k]
           end
-
-          diff[k]['diff_json_operations'] << key_operation
-          diff[k]['diff_json_type']  = key_type
-          diff[k]['diff_json_value'] = key_value
         end
       end
 
