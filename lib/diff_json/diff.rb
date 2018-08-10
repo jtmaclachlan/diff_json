@@ -1,18 +1,21 @@
 module DiffJson
   class Diff
     def initialize(old_json, new_json, **opts)
-      @old_json = old_json
-      @new_json = new_json
-      # Diff info container
-      @diff = {}
+      @old_json   = old_json
+      @new_json   = new_json
+      @calculated = false
+      @diff = {
+        :old => [],
+        :new => []
+      }
     end
 
     def output(output_type = :stdout)
-      calculate if @diff.empty?
+      calculate unless @calculated
 
       case output_type
       when :raw
-        return JSON.pretty_generate(@diff)
+        return @diff
       when :stdout
       when :file
       when :html
@@ -28,10 +31,10 @@ module DiffJson
         '----------------------',
         ''
       ]
-      @diff = compare_elements(@old_json, @new_json)
+      @diff[:old], @diff[:new] = compare_elements(@old_json, @new_json)
     end
 
-    def compare_elements(old_element, new_element, path = '$')
+    def compare_elements(old_element, new_element, indent_step = 0)
       puts [
         'DEBUG -- Enter compare_elements',
         '',
@@ -45,38 +48,27 @@ module DiffJson
       pp(new_element)
       puts ''
 
-      element_diff = {
-        'diff_json_element'   => true,
-        'diff_json_operation' => nil,
-        'diff_json_types'     => {
-          'old' => value_type(old_element),
-          'new' => value_type(new_element)
-        }
-      }
+      old_element_lines, new_element_lines = [], []
 
       if old_element == new_element
-        element_diff['diff_json_operation'] = 'none'
-        element_diff['diff_json_values']    = {
-          'old' => old_element,
-          'new' => new_element
-        }
+        element_lines_arr = JSON.pretty_generate(old_element).split("\n").map{|el| [' ', "#{indentation(indent_step)}#{el}"]}
+        old_element_lines = element_lines_arr
+        new_element_lines = element_lines_arr
       else
-        unless element_diff['diff_json_types']['old'] == element_diff['diff_json_types']['new']
-          element_diff['diff_json_operation'] = 'replace'
-          element_diff['diff_json_values']    = {
-            'old' => old_element,
-            'new' => new_element
-          }
+        unless value_type(old_element) == value_type(new_element)
+          old_element_lines, new_element_lines = add_blank_lines(
+            JSON.pretty_generate(old_element).split("\n").map{|el| ['-', "#{indentation(indent_step)}#{el}"]},
+            JSON.pretty_generate(new_element).split("\n").map{|el| ['+', "#{indentation(indent_step)}#{el}"]}
+          )
         else
-          element_diff['diff_json_operation'] = 'update'
-          element_diff.merge!(self.send("#{element_diff['diff_json_types']['old']}_diff", old_element, new_element, path))
+          old_element_lines, new_element_lines = self.send("#{value_type(old_element)}_diff", old_element, new_element, (indent_step + 1))
         end
       end
 
-      return element_diff
+      return old_element_lines, new_element_lines
     end
 
-    def array_diff(old_array, new_array, base_path)
+    def array_diff(old_array, new_array, indent_step)
       puts [
         'DEBUG -- Enter array_diff',
         '',
@@ -93,7 +85,7 @@ module DiffJson
       oal, nal   = old_array.length, new_array.length
       sal        = oal < nal ? oal : nal
       lal        = oal > nal ? oal : nal
-      diff       = {}
+      old_array_lines, new_array_lines = [[' ', "#{indentation(indent_step)}["]], [[' ', "#{indentation(indent_step)}["]]
       operations = {
         'none'             => [],
         'arr_add_index'    => [],
@@ -147,59 +139,118 @@ module DiffJson
           ''
         ]
 
-        index_path = "#{base_path}[#{i}]"
-        diff[i] = {
-          'diff_json_operations' => [],
-          'diff_json_types'      => {
-            'old' => nil,
-            'new' => nil
-          },
-          'diff_json_values'     => {
-            'old' => nil,
-            'new' => nil
-          }
-        }
-
-        diff[i]['diff_json_types']['old']  = ((i <= old_array.length and !old_array.empty?) ? value_type(old_array[i]) : UndefinedValue.new)
-        diff[i]['diff_json_types']['new']  = ((i <= new_array.length and !new_array.empty?) ? value_type(new_array[i]) : UndefinedValue.new)
-        diff[i]['diff_json_values']['old'] = old_array[i]
-        diff[i]['diff_json_values']['new'] = new_array[i]
+        old_item_lines, new_item_lines = [], []
+        item_diff_operations = []
+        last_loop = (i == (lal - 1))
 
         # Assign current known operations to each index
         (operations.keys).each do |operation|
           if operations[operation].include?(i)
-            diff[i]['diff_json_operations'] << operation
+            item_diff_operations << operation
           end
         end
 
-        # Assign local change operations
-        if diff[i]['diff_json_operations'].empty?
-          diff[i]['diff_json_operations'] << 'arr_change_value'
+        # Add arr_change_value, arr_add_value, and arr_drop_value operations
+        if item_diff_operations.empty?
+          item_diff_operations << 'arr_change_value'
         elsif (
-          diff[i]['diff_json_operations'].include?('arr_send_move') and
-          !diff[i]['diff_json_operations'].include?('arr_receive_move') and
-          !diff[i]['diff_json_operations'].include?('arr_drop_index')
+          item_diff_operations.include?('arr_send_move') and
+          !item_diff_operations.include?('arr_receive_move') and
+          !item_diff_operations.include?('arr_drop_index')
         )
-          diff[i]['diff_json_operations'] << 'arr_add_value'
+          item_diff_operations << 'arr_add_value'
         elsif (
-          !diff[i]['diff_json_operations'].include?('arr_send_move') and
-          diff[i]['diff_json_operations'].include?('arr_receive_move') and
-          !diff[i]['diff_json_operations'].include?('arr_add_index')
+          !item_diff_operations.include?('arr_send_move') and
+          item_diff_operations.include?('arr_receive_move') and
+          !item_diff_operations.include?('arr_add_index')
         )
-          diff[i]['diff_json_operations'] << 'arr_drop_value'
+          item_diff_operations << 'arr_drop_value'
         end
 
-        unless (diff[i]['diff_json_operations'] & ['none', 'arr_change_value']).empty?
-          if is_json_element?(old_array[i]) and is_json_element?(new_array[i])
-            diff[i] = compare_elements(old_array[i], new_array[i])
+        puts [
+          'DEBUG -- item operations',
+          item_diff_operations,
+          ''
+        ]
+
+        # Call compare_elements for sub-elements if necessary
+        if (!(item_diff_operations & ['none', 'arr_change_value']).empty? and
+          is_json_element?(old_array[i]) and is_json_element?(new_array[i])
+        )
+          old_item_lines, new_item_lines = compare_elements(old_array[i], new_array[i], (indent_step))
+        else
+          # Grab old and new items
+          # UndefinedValue class is here to represent the difference between explicit null and non-existent
+          old_item = item_diff_operations.include?('arr_add_index') ? UndefinedValue.new : old_array[i]
+          new_item = item_diff_operations.include?('arr_drop_index') ? UndefinedValue.new : new_array[i]
+
+          # Figure out operators for left and right
+          if item_diff_operations.include?('none')
+            old_operator, new_operator = ' '
+          elsif item_diff_operations.include?('arr_change_value')
+            old_operator, new_operator = '-', '+'
+          elsif (item_diff_operations & ['arr_send_move', 'arr_receive_move']).length == 2
+            old_operator, new_operator = 'M', 'M'
+          elsif item_diff_operations.include?('arr_add_value')
+            old_operator, new_operator = 'M', '+'
+          elsif item_diff_operations.include?('arr_drop_value')
+            old_operator, new_operator = '-', 'M'
+          elsif item_diff_operations.include?('arr_drop_index')
+            if item_diff_operations.include?('arr_send_move')
+              old_operator, new_operator = 'M', ' '
+            else
+              old_operator, new_operator = '-', ' '
+            end
+          elsif item_diff_operations.include?('arr_add_index')
+            if item_diff_operations.include?('arr_receive_move')
+              old_operator, new_operator = ' ', 'M'
+            else
+              old_operator, new_operator = ' ', '+'
+            end
+          end
+
+          puts [
+            'DEBUG -- operators',
+            old_operator.inspect,
+            new_operator.inspect,
+            ''
+          ]
+
+          # Gather lines
+          if old_item.is_a?(UndefinedValue)
+            new_item_lines = JSON.pretty_generate(new_item).split("\n").map{|il| [new_operator, "#{indentation(indent_step + 1)}#{il}"]}
+
+            (0..(new_item_lines.length - 1)).each do |i|
+              old_item_lines << [' ', '']
+            end
+          else
+            old_item_lines = JSON.pretty_generate(old_item).split("\n").map{|il| [old_operator, "#{indentation(indent_step + 1)}#{il}"]}
+          end
+
+          if new_item.is_a?(UndefinedValue)
+            (0..(old_item_lines.length - 1)).each do |i|
+              new_item_lines << [' ', '']
+            end
+          else
+            new_item_lines = JSON.pretty_generate(new_item).split("\n").map{|il| [new_operator, "#{indentation(indent_step + 1)}#{il}"]}
           end
         end
+
+        old_item_lines.last[1] = "#{old_item_lines.last[1]}," unless last_loop
+        new_item_lines.last[1] = "#{new_item_lines.last[1]}," unless last_loop
+        old_item_lines, new_item_lines = add_blank_lines(old_item_lines, new_item_lines)
+
+        old_array_lines += old_item_lines
+        new_array_lines += new_item_lines
       end
 
-      return diff
+      old_array_lines << [' ', "#{indentation(indent_step)}]"]
+      new_array_lines << [' ', "#{indentation(indent_step)}]"]
+
+      return old_array_lines, new_array_lines
     end
 
-    def object_diff(old_object, new_object, base_path)
+    def object_diff(old_object, new_object, indent_step)
       puts [
         'DEBUG -- Enter object_diff',
         '',
@@ -219,7 +270,7 @@ module DiffJson
         'add'    => (new_object.keys - old_object.keys),
         'drop'   => (old_object.keys - new_object.keys)
       }
-      diff = {}
+      old_object_lines, new_object_lines = [[' ', "#{indentation(indent_step)}{"]], [[' ', "#{indentation(indent_step)}{"]]
 
       # For objects, we're taking a much simpler approach, so no movements
       keys['all'].each do |k|
@@ -228,50 +279,71 @@ module DiffJson
           ''
         ]
 
-        key_path = "#{base_path}{#{k}}"
-        diff[k] = {
-          'diff_json_operations' => [],
-          'diff_json_types'      => {
-            'old' => nil,
-            'new' => nil
-          },
-          'diff_json_values'     => {
-            'old' => nil,
-            'new' => nil
-          }
-        }
+        old_item_lines, new_item_lines = [], []
+        last_loop = (k == keys['all'].last)
 
         if keys['common'].include?(k)
           if is_json_element?(old_object[k]) and is_json_element?(new_object[k])
-            diff[k] = compare_elements(old_object[k], new_object[k], key_path)
+            old_item_lines, new_item_lines = compare_elements(old_object[k], new_object[k], (indent_step + 1))
+            old_item_lines[0][1] = "#{indentation(indent_step + 1)}#{JSON.pretty_generate(k)}: #{old_item_lines[0][1].gsub(/^\s+/, '')}"
+            new_item_lines[0][1] = "#{indentation(indent_step + 1)}#{JSON.pretty_generate(k)}: #{new_item_lines[0][1].gsub(/^\s+/, '')}"
           else
             if old_object[k] == new_object[k]
-              diff[k]['diff_json_operations'] << 'none'
+              item_lines = JSON.pretty_generate(old_object[k]).split("\n")
+              item_lines[0] = "#{JSON.pretty_generate(k)}: #{item_lines[0]}"
+              item_lines.map!{|il| ['|', "#{indentation(indent_step)}#{il}"]}
+              old_item_lines = item_lines
+              new_item_lines = item_lines
             else
-              diff[k]['diff_json_operations'] << 'obj_change_value'
+              old_item_lines    = JSON.pretty_generate(old_object[k]).split("\n")
+              old_item_lines[0] = "#{JSON.pretty_generate(k)}: #{old_item_lines[0]}"
+              old_item_lines.map!{|il| ['-', "#{indentation(indent_step)}#{il}"]}
+              new_item_lines    = JSON.pretty_generate(new_object[k]).split("\n")
+              new_item_lines[0] = "#{JSON.pretty_generate(k)}: #{new_item_lines[0]}"
+              new_item_lines.map!{|il| ['+', "#{indentation(indent_step)}#{il}"]}
             end
-
-            diff[k]['diff_json_types']['old']  = value_type(old_object[k])
-            diff[k]['diff_json_types']['new']  = value_type(new_object[k])
-            diff[k]['diff_json_values']['old'] = old_object[k]
-            diff[k]['diff_json_values']['new'] = new_object[k]
           end
         else
           if keys['drop'].include?(k)
-            diff[k]['diff_json_operations'] << 'obj_drop_key'
-            diff[k]['diff_json_types']['old']  = value_type(old_object[k])
-            diff[k]['diff_json_types']['new']  = UndefinedValue.new
-            diff[k]['diff_json_values']['old'] = old_object[k]
+            old_item_lines    = JSON.pretty_generate(old_object[k]).split("\n")
+            old_item_lines[0] = "#{JSON.pretty_generate(k)}: #{old_item_lines[0]}"
+            old_item_lines.map!{|il| ['-', "#{indentation(indent_step)}#{il}"]}
+            new_item_lines = []
+
+            (0..(old_item_lines.length - 1)).each do |i|
+              new_item_lines << [' ', '']
+            end
           else
-            diff[k]['diff_json_operations'] << 'obj_add_key'
-            diff[k]['diff_json_types']['old']  = UndefinedValue.new
-            diff[k]['diff_json_types']['new']  = value_type(new_object[k])
-            diff[k]['diff_json_values']['new'] = new_object[k]
+            new_item_lines    = JSON.pretty_generate(new_object[k]).split("\n")
+            new_item_lines[0] = "#{JSON.pretty_generate(k)}: #{new_item_lines[0]}"
+            new_item_lines.map!{|il| ['-', "#{indentation(indent_step)}#{il}"]}
+            old_item_lines = []
+
+            (0..(new_item_lines.length - 1)).each do |i|
+              old_item_lines << [' ', '']
+            end
           end
         end
+
+        puts [
+          'DEBUG -- old item lines',
+          old_item_lines,
+          'DEBUG -- new item lines',
+          new_item_lines
+        ]
+
+        old_item_lines.last[1] = "#{old_item_lines.last[1]}," unless last_loop
+        new_item_lines.last[1] = "#{new_item_lines.last[1]}," unless last_loop
+        old_item_lines, new_item_lines = add_blank_lines(old_item_lines, new_item_lines)
+
+        old_object_lines += old_item_lines
+        new_object_lines += new_item_lines
       end
 
-      return diff
+      old_object_lines << [' ', "#{indentation(indent_step)}}"]
+      new_object_lines << [' ', "#{indentation(indent_step)}}"]
+
+      return old_object_lines, new_object_lines
     end
 
     def array_indices(array, value)
@@ -299,6 +371,24 @@ module DiffJson
       else
         return class_name.downcase
       end
+    end
+
+    def indentation(step)
+      '  ' * step
+    end
+
+    def add_blank_lines(left_lines, right_lines)
+      if left_lines.length < right_lines.length
+        (1..(right_lines.length - left_lines.length)).each do
+          left_lines << [' ', '']
+        end
+      elsif left_lines.length > right_lines.length
+        (1..(left_lines.length - right_lines.length)).each do
+          right_lines << [' ', '']
+        end
+      end
+
+      return left_lines, right_lines
     end
   end
 end
