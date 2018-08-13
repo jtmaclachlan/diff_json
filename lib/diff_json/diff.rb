@@ -35,18 +35,7 @@ module DiffJson
     end
 
     def compare_elements(old_element, new_element, indent_step = 0)
-      puts [
-        'DEBUG -- Enter compare_elements',
-        '',
-        'Old Element ->'
-      ]
-      pp(old_element)
-      puts [
-        '',
-        'New Element ->'
-      ]
-      pp(new_element)
-      puts ''
+      puts 'ENTER compare_elements'
 
       old_element_lines, new_element_lines = [], []
 
@@ -61,7 +50,13 @@ module DiffJson
             JSON.pretty_generate(new_element).split("\n").map{|el| ['+', "#{indentation(indent_step)}#{el}"]}
           )
         else
-          old_element_lines, new_element_lines = self.send("#{value_type(old_element)}_diff", old_element, new_element, (indent_step + 1))
+          old_element_lines, new_element_lines = self.send("#{value_type(old_element)}_diff", old_element, new_element, indent_step)
+          puts [
+            'old element lines',
+            old_element_lines,
+            'New element lines',
+            new_element_lines
+          ]
         end
       end
 
@@ -69,23 +64,12 @@ module DiffJson
     end
 
     def array_diff(old_array, new_array, indent_step)
-      puts [
-        'DEBUG -- Enter array_diff',
-        '',
-        'Old Array ->'
-      ]
-      pp(old_array)
-      puts [
-        '',
-        'New Array ->'
-      ]
-      pp(new_array)
-      puts ''
-
+      puts 'ENTER array_diff'
       oal, nal   = old_array.length, new_array.length
       sal        = oal < nal ? oal : nal
       lal        = oal > nal ? oal : nal
       old_array_lines, new_array_lines = [[' ', "#{indentation(indent_step)}["]], [[' ', "#{indentation(indent_step)}["]]
+      next_step = indent_step + 1
       operations = {
         'none'             => [],
         'arr_add_index'    => [],
@@ -134,10 +118,7 @@ module DiffJson
 
       # Add base diff for each index
       (0..(lal - 1)).each do |i|
-        puts [
-          "DEBUG -- processing array index #{i}",
-          ''
-        ]
+        puts "PROCESS #{i}"
 
         old_item_lines, new_item_lines = [], []
         item_diff_operations = []
@@ -168,16 +149,15 @@ module DiffJson
         end
 
         puts [
-          'DEBUG -- item operations',
-          item_diff_operations,
-          ''
+          'Operations',
+          item_diff_operations.join(', ')
         ]
 
         # Call compare_elements for sub-elements if necessary
         if (!(item_diff_operations & ['none', 'arr_change_value']).empty? and
           is_json_element?(old_array[i]) and is_json_element?(new_array[i])
         )
-          old_item_lines, new_item_lines = compare_elements(old_array[i], new_array[i], (indent_step))
+          old_item_lines, new_item_lines = compare_elements(old_array[i], new_array[i], (next_step))
         else
           # Grab old and new items
           # UndefinedValue class is here to represent the difference between explicit null and non-existent
@@ -210,21 +190,19 @@ module DiffJson
           end
 
           puts [
-            'DEBUG -- operators',
-            old_operator.inspect,
-            new_operator.inspect,
-            ''
+            'Operators',
+            "#{old_operator.inspect}, #{new_operator.inspect}"
           ]
 
           # Gather lines
           if old_item.is_a?(UndefinedValue)
-            new_item_lines = JSON.pretty_generate(new_item).split("\n").map{|il| [new_operator, "#{indentation(indent_step + 1)}#{il}"]}
+            new_item_lines = JSON.pretty_generate(new_item).split("\n").map{|il| [new_operator, "#{indentation(next_step)}#{il}"]}
 
             (0..(new_item_lines.length - 1)).each do |i|
               old_item_lines << [' ', '']
             end
           else
-            old_item_lines = JSON.pretty_generate(old_item).split("\n").map{|il| [old_operator, "#{indentation(indent_step + 1)}#{il}"]}
+            old_item_lines = JSON.pretty_generate(old_item).split("\n").map{|il| [old_operator, "#{indentation(next_step)}#{il}"]}
           end
 
           if new_item.is_a?(UndefinedValue)
@@ -232,12 +210,10 @@ module DiffJson
               new_item_lines << [' ', '']
             end
           else
-            new_item_lines = JSON.pretty_generate(new_item).split("\n").map{|il| [new_operator, "#{indentation(indent_step + 1)}#{il}"]}
+            new_item_lines = JSON.pretty_generate(new_item).split("\n").map{|il| [new_operator, "#{indentation(next_step)}#{il}"]}
           end
         end
 
-        old_item_lines.last[1] = "#{old_item_lines.last[1]}," unless last_loop
-        new_item_lines.last[1] = "#{new_item_lines.last[1]}," unless last_loop
         old_item_lines, new_item_lines = add_blank_lines(old_item_lines, new_item_lines)
 
         old_array_lines += old_item_lines
@@ -251,18 +227,7 @@ module DiffJson
     end
 
     def object_diff(old_object, new_object, indent_step)
-      puts [
-        'DEBUG -- Enter object_diff',
-        '',
-        'Old Object ->'
-      ]
-      pp(old_object)
-      puts [
-        '',
-        'New Object ->'
-      ]
-      pp(new_object)
-      puts ''
+      puts 'ENTER object_diff'
 
       keys = {
         'all'    => (old_object.keys | new_object.keys),
@@ -271,52 +236,40 @@ module DiffJson
         'drop'   => (old_object.keys - new_object.keys)
       }
       old_object_lines, new_object_lines = [[' ', "#{indentation(indent_step)}{"]], [[' ', "#{indentation(indent_step)}{"]]
+      next_step = indent_step + 1
 
       # For objects, we're taking a much simpler approach, so no movements
       keys['all'].each do |k|
-        puts [
-          "DEBUG -- processing object key #{k}",
-          ''
-        ]
+        puts "PROCESS #{k}"
 
+        key_string = "#{JSON.pretty_generate(k)}: "
         old_item_lines, new_item_lines = [], []
         last_loop = (k == keys['all'].last)
 
         if keys['common'].include?(k)
           if is_json_element?(old_object[k]) and is_json_element?(new_object[k])
-            old_item_lines, new_item_lines = compare_elements(old_object[k], new_object[k], (indent_step + 1))
-            old_item_lines[0][1] = "#{indentation(indent_step + 1)}#{JSON.pretty_generate(k)}: #{old_item_lines[0][1].gsub(/^\s+/, '')}"
-            new_item_lines[0][1] = "#{indentation(indent_step + 1)}#{JSON.pretty_generate(k)}: #{new_item_lines[0][1].gsub(/^\s+/, '')}"
+            old_item_lines, new_item_lines = compare_elements(old_object[k], new_object[k], (next_step))
+
           else
             if old_object[k] == new_object[k]
-              item_lines = JSON.pretty_generate(old_object[k]).split("\n")
-              item_lines[0] = "#{JSON.pretty_generate(k)}: #{item_lines[0]}"
-              item_lines.map!{|il| ['|', "#{indentation(indent_step)}#{il}"]}
-              old_item_lines = item_lines
-              new_item_lines = item_lines
+              item_lines = JSON.pretty_generate(old_object[k]).split("\n").map!{|il| [' ', "#{indentation(next_step)}#{il}"]}
+              old_item_lines = item_lines.dup
+              new_item_lines = item_lines.dup
             else
-              old_item_lines    = JSON.pretty_generate(old_object[k]).split("\n")
-              old_item_lines[0] = "#{JSON.pretty_generate(k)}: #{old_item_lines[0]}"
-              old_item_lines.map!{|il| ['-', "#{indentation(indent_step)}#{il}"]}
-              new_item_lines    = JSON.pretty_generate(new_object[k]).split("\n")
-              new_item_lines[0] = "#{JSON.pretty_generate(k)}: #{new_item_lines[0]}"
-              new_item_lines.map!{|il| ['+', "#{indentation(indent_step)}#{il}"]}
+              old_item_lines = JSON.pretty_generate(old_object[k]).split("\n").map!{|il| ['-', "#{indentation(next_step)}#{il}"]}
+              new_item_lines = JSON.pretty_generate(new_object[k]).split("\n").map!{|il| ['+', "#{indentation(next_step)}#{il}"]}
             end
           end
         else
           if keys['drop'].include?(k)
-            old_item_lines    = JSON.pretty_generate(old_object[k]).split("\n")
-            old_item_lines[0] = "#{JSON.pretty_generate(k)}: #{old_item_lines[0]}"
-            old_item_lines.map!{|il| ['-', "#{indentation(indent_step)}#{il}"]}
+            old_item_lines = JSON.pretty_generate(old_object[k]).split("\n").map!{|il| ['-', "#{indentation(next_step)}#{il}"]}
             new_item_lines = []
 
             (0..(old_item_lines.length - 1)).each do |i|
               new_item_lines << [' ', '']
             end
           else
-            new_item_lines    = JSON.pretty_generate(new_object[k]).split("\n")
-            new_item_lines[0] = "#{JSON.pretty_generate(k)}: #{new_item_lines[0]}"
-            new_item_lines.map!{|il| ['-', "#{indentation(indent_step)}#{il}"]}
+            new_item_lines = JSON.pretty_generate(new_object[k]).split("\n").map!{|il| ['-', "#{indentation(next_step)}#{il}"]}
             old_item_lines = []
 
             (0..(new_item_lines.length - 1)).each do |i|
@@ -325,15 +278,13 @@ module DiffJson
           end
         end
 
-        puts [
-          'DEBUG -- old item lines',
-          old_item_lines,
-          'DEBUG -- new item lines',
-          new_item_lines
-        ]
+        unless old_item_lines.empty?
+          old_item_lines[0][1].gsub!(/^(?<spaces>\s+)(?<content>.+)$/, "\\k<spaces>#{key_string}\\k<content>")
+        end
+        unless new_item_lines.empty?
+          new_item_lines[0][1].gsub!(/^(?<spaces>\s+)(?<content>.+)$/, "\\k<spaces>#{key_string}\\k<content>")
+        end
 
-        old_item_lines.last[1] = "#{old_item_lines.last[1]}," unless last_loop
-        new_item_lines.last[1] = "#{new_item_lines.last[1]}," unless last_loop
         old_item_lines, new_item_lines = add_blank_lines(old_item_lines, new_item_lines)
 
         old_object_lines += old_item_lines
@@ -374,6 +325,7 @@ module DiffJson
     end
 
     def indentation(step)
+      step = 0 if step < 0
       '  ' * step
     end
 
