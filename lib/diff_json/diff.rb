@@ -247,10 +247,10 @@ module DiffJson
         last_loop = (k == keys['all'].last)
 
         if keys['common'].include?(k)
-          if is_json_element?(old_object[k]) and is_json_element?(new_object[k])
+          if is_json_element?(old_object[k]) and is_json_element?(new_object[k]) and !@opts[:ignore_object_keys].include?(k)
             old_item_lines, new_item_lines = compare_elements(old_object[k], new_object[k], (next_step))
           else
-            if old_object[k] == new_object[k]
+            if old_object[k] == new_object[k] or @opts[:ignore_object_keys].include?(k)
               old_item_lines = JSON.pretty_generate(old_object[k]).split("\n").map!{|il| [' ', "#{indentation(next_step)}#{il}"]}
               new_item_lines = JSON.pretty_generate(new_object[k]).split("\n").map!{|il| [' ', "#{indentation(next_step)}#{il}"]}
             else
@@ -260,14 +260,14 @@ module DiffJson
           end
         else
           if keys['drop'].include?(k)
-            old_item_lines = JSON.pretty_generate(old_object[k]).split("\n").map!{|il| ['-', "#{indentation(next_step)}#{il}"]}
+            old_item_lines = JSON.pretty_generate(old_object[k]).split("\n").map!{|il| [@opts[:ignore_object_keys].include?(k) ? ' ' : '-', "#{indentation(next_step)}#{il}"]}
             new_item_lines = []
 
             (0..(old_item_lines.length - 1)).each do |i|
               new_item_lines << [' ', '']
             end
           else
-            new_item_lines = JSON.pretty_generate(new_object[k]).split("\n").map!{|il| ['-', "#{indentation(next_step)}#{il}"]}
+            new_item_lines = JSON.pretty_generate(new_object[k]).split("\n").map!{|il| [@opts[:ignore_object_keys].include?(k) ? ' ' : '+', "#{indentation(next_step)}#{il}"]}
             old_item_lines = []
 
             (0..(new_item_lines.length - 1)).each do |i|
