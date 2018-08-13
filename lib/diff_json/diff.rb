@@ -12,10 +12,14 @@ module DiffJson
         }
       }.merge(opts)
       @calculated = false
-      @diff_ct    = 0
+      @filtered   = @opts[:diff_count_filter] != {
+        :only   => ['$**'],
+        :except => []
+      }
       @diff       = {
-        :old => [],
-        :new => []
+        :count => 0,
+        :old   => [],
+        :new   => []
       }
     end
 
@@ -53,15 +57,16 @@ module DiffJson
       if old_element == new_element
         debug('Equal elements, no diff required')
 
-        old_element_lines = JSON.pretty_generate(old_element).split("\n").map{|el| [' ', "#{indentation(indent_step)}#{el}"]}
-        new_element_lines = JSON.pretty_generate(new_element).split("\n").map{|el| [' ', "#{indentation(indent_step)}#{el}"]}
+        old_element_lines = JSON.pretty_generate(old_element, max_nesting: false).split("\n").map{|el| [' ', "#{indentation(indent_step)}#{el}"]}
+        new_element_lines = JSON.pretty_generate(new_element, max_nesting: false).split("\n").map{|el| [' ', "#{indentation(indent_step)}#{el}"]}
       else
         unless value_type(old_element) == value_type(new_element)
           debug('Opposite type element, no diff required')
 
+          increment_diff_count(1, item_path)
           old_element_lines, new_element_lines = add_blank_lines(
-            JSON.pretty_generate(old_element).split("\n").map{|el| ['-', "#{indentation(indent_step)}#{el}"]},
-            JSON.pretty_generate(new_element).split("\n").map{|el| ['+', "#{indentation(indent_step)}#{el}"]}
+            JSON.pretty_generate(old_element, max_nesting: false).split("\n").map{|el| ['-', "#{indentation(indent_step)}#{el}"]},
+            JSON.pretty_generate(new_element, max_nesting: false).split("\n").map{|el| ['+', "#{indentation(indent_step)}#{el}"]}
           )
         else
           debug("Found #{value_type(old_element)}, diffing")
@@ -131,6 +136,7 @@ module DiffJson
       (0..(lal - 1)).each do |i|
         debug("PROCESS INDEX #{i}")
 
+        item_path = "#{base_path}[#{i}]"
         old_item_lines, new_item_lines = [], []
         item_diff_operations = []
         last_loop = (i == (lal - 1))
@@ -163,8 +169,7 @@ module DiffJson
         if (!(item_diff_operations & ['none', 'arr_change_value']).empty? and
           is_json_element?(old_array[i]) and is_json_element?(new_array[i])
         )
-          sub_path = "#{base_path}[#{i}]"
-          old_item_lines, new_item_lines = compare_elements(old_array[i], new_array[i], next_step, sub_path)
+          old_item_lines, new_item_lines = compare_elements(old_array[i], new_array[i], next_step, item_path)
         else
           # Grab old and new items
           # UndefinedValue class is here to represent the difference between explicit null and non-existent
@@ -175,20 +180,28 @@ module DiffJson
           if item_diff_operations.include?('none')
             old_operator, new_operator = ' '
           elsif item_diff_operations.include?('arr_change_value')
+            increment_diff_count(1, item_path)
             old_operator, new_operator = '-', '+'
           elsif (item_diff_operations & ['arr_send_move', 'arr_receive_move']).length == 2
+            increment_diff_count(1, item_path)
             old_operator, new_operator = 'M', 'M'
           elsif item_diff_operations.include?('arr_add_value')
+            increment_diff_count(2, item_path)
             old_operator, new_operator = 'M', '+'
           elsif item_diff_operations.include?('arr_drop_value')
+            increment_diff_count(2, item_path)
             old_operator, new_operator = '-', 'M'
           elsif item_diff_operations.include?('arr_drop_index')
+            increment_diff_count(1, item_path)
+
             if item_diff_operations.include?('arr_send_move')
               old_operator, new_operator = 'M', ' '
             else
               old_operator, new_operator = '-', ' '
             end
           elsif item_diff_operations.include?('arr_add_index')
+            increment_diff_count(1, item_path)
+
             if item_diff_operations.include?('arr_receive_move')
               old_operator, new_operator = ' ', 'M'
             else
@@ -198,13 +211,13 @@ module DiffJson
 
           # Gather lines
           if old_item.is_a?(UndefinedValue)
-            new_item_lines = JSON.pretty_generate(new_item).split("\n").map{|il| [new_operator, "#{indentation(next_step)}#{il}"]}
+            new_item_lines = JSON.pretty_generate(new_item, max_nesting: false).split("\n").map{|il| [new_operator, "#{indentation(next_step)}#{il}"]}
 
             (0..(new_item_lines.length - 1)).each do |i|
               old_item_lines << [' ', '']
             end
           else
-            old_item_lines = JSON.pretty_generate(old_item).split("\n").map{|il| [old_operator, "#{indentation(next_step)}#{il}"]}
+            old_item_lines = JSON.pretty_generate(old_item, max_nesting: false).split("\n").map{|il| [old_operator, "#{indentation(next_step)}#{il}"]}
           end
 
           if new_item.is_a?(UndefinedValue)
@@ -212,7 +225,7 @@ module DiffJson
               new_item_lines << [' ', '']
             end
           else
-            new_item_lines = JSON.pretty_generate(new_item).split("\n").map{|il| [new_operator, "#{indentation(next_step)}#{il}"]}
+            new_item_lines = JSON.pretty_generate(new_item, max_nesting: false).split("\n").map{|il| [new_operator, "#{indentation(next_step)}#{il}"]}
           end
         end
 
@@ -251,32 +264,35 @@ module DiffJson
       keys['all'].each do |k|
         debug("PROCESS KEY #{k}")
 
+        item_path = "#{base_path}{#{k}}"
         key_string = "#{JSON.pretty_generate(k)}: "
         old_item_lines, new_item_lines = [], []
         last_loop = (k == keys['all'].last)
 
         if keys['common'].include?(k)
           if is_json_element?(old_object[k]) and is_json_element?(new_object[k]) and !@opts[:ignore_object_keys].include?(k)
-            sub_path = "#{base_path}{#{k}}"
-            old_item_lines, new_item_lines = compare_elements(old_object[k], new_object[k], next_step, sub_path)
+            old_item_lines, new_item_lines = compare_elements(old_object[k], new_object[k], next_step, item_path)
           else
             if old_object[k] == new_object[k] or @opts[:ignore_object_keys].include?(k)
-              old_item_lines = JSON.pretty_generate(old_object[k]).split("\n").map!{|il| [' ', "#{indentation(next_step)}#{il}"]}
-              new_item_lines = JSON.pretty_generate(new_object[k]).split("\n").map!{|il| [' ', "#{indentation(next_step)}#{il}"]}
+              old_item_lines = JSON.pretty_generate(old_object[k], max_nesting: false).split("\n").map!{|il| [' ', "#{indentation(next_step)}#{il}"]}
+              new_item_lines = JSON.pretty_generate(new_object[k], max_nesting: false).split("\n").map!{|il| [' ', "#{indentation(next_step)}#{il}"]}
             else
-              old_item_lines = JSON.pretty_generate(old_object[k]).split("\n").map!{|il| ['-', "#{indentation(next_step)}#{il}"]}
-              new_item_lines = JSON.pretty_generate(new_object[k]).split("\n").map!{|il| ['+', "#{indentation(next_step)}#{il}"]}
+              increment_diff_count(1, item_path)
+              old_item_lines = JSON.pretty_generate(old_object[k], max_nesting: false).split("\n").map!{|il| ['-', "#{indentation(next_step)}#{il}"]}
+              new_item_lines = JSON.pretty_generate(new_object[k], max_nesting: false).split("\n").map!{|il| ['+', "#{indentation(next_step)}#{il}"]}
             end
           end
         else
           if keys['drop'].include?(k)
-            old_item_lines = JSON.pretty_generate(old_object[k]).split("\n").map!{|il| [@opts[:ignore_object_keys].include?(k) ? ' ' : '-', "#{indentation(next_step)}#{il}"]}
+            increment_diff_count(1, item_path) unless @opts[:ignore_object_keys].include?(k)
+            old_item_lines = JSON.pretty_generate(old_object[k], max_nesting: false).split("\n").map!{|il| [@opts[:ignore_object_keys].include?(k) ? ' ' : '-', "#{indentation(next_step)}#{il}"]}
             new_item_lines = []
 
             (0..(old_item_lines.length - 1)).each do |i|
               new_item_lines << [' ', '']
             end
           elsif keys['add'].include?(k)
+            increment_diff_count(1, item_path) unless @opts[:ignore_object_keys].include?(k)
             new_item_lines = JSON.pretty_generate(new_object[k]).split("\n").map!{|il| [@opts[:ignore_object_keys].include?(k) ? ' ' : '+', "#{indentation(next_step)}#{il}"]}
             old_item_lines = []
 
@@ -355,6 +371,83 @@ module DiffJson
       end
 
       return left_lines, right_lines
+    end
+
+    def increment_diff_count(diff_num, path)
+      debug([
+        'ENTER increment_diff_count',
+        diff_num,
+        path
+      ])
+      unless @filtered
+        @diff[:count] += diff_num
+      else
+        do_count = false
+
+        # Any path prefixes in `only` that match?
+        if (
+          @opts[:diff_count_filter].key?(:only) and
+          @opts[:diff_count_filter][:only].is_a?(Array)
+        )
+          @opts[:diff_count_filter][:only].each do |only_path|
+            debug([
+              'Attempt only path match',
+              only_path
+            ])
+            only_path_prefix   = only_path.gsub(/\*/, '')
+            only_path_wildcard = only_path.gsub(/[^\*]/, '')
+
+            if path.include?(only_path_prefix)
+              path_remainder = path.gsub(only_path_prefix, '').split(/(\]\[|\]\{|\}\[|\}\{)/)
+
+              debug([
+                path_remainder,
+                only_path_wildcard
+              ])
+
+              if (
+                (path_remainder.length == 0 and only_path_wildcard.length == 0) or
+                (path_remainder.length == 1 and only_path_wildcard.length > 0) or
+                (path_remainder.length > 1 and only_path_wildcard.length > 1)
+              )
+                do_count = true
+                break
+              end
+            else
+              next
+            end
+          end
+        end
+
+        # Make sure the specific path is not excluded, if we've established that we should probably include it
+        if (
+          do_count and
+          @opts[:diff_count_filter].key?(:except) and
+          @opts[:diff_count_filter][:except].is_a?(Array)
+        )
+          @opts[:diff_count_filter][:except].each do |except_path|
+            except_path_prefix   = except_path.gsub(/\*/, '')
+            except_path_wildcard = except_path.gsub(/[^\*]/, '') || ''
+
+            if path.include?(except_path_prefix)
+              path_remainder = path.gsub(except_path_prefix, '').split(/(\]\[|\]\{|\}\[|\}\{)/)
+
+              if (
+                (path_remainder.length == 0 and except_path_wildcard.length == 0) or
+                (path_remainder.length == 1 and except_path_wildcard.length > 0) or
+                (path_remainder.length > 1 and except_path_wildcard.length > 1)
+              )
+                do_count = false
+                break
+              end
+            else
+              next
+            end
+          end
+        end
+
+        @diff[:count] += diff_num if do_count
+      end
     end
   end
 end
