@@ -11,13 +11,13 @@ module DiffJson
           :except => []
         }
       }.merge(opts)
-      @calculated = false
       @filtered   = @opts[:diff_count_filter] != {
         :only   => ['$**'],
         :except => []
       }
       @diff       = {
         :count => {
+          :all    => 0,
           :insert => 0,
           :update => 0,
           :delete => 0,
@@ -26,21 +26,21 @@ module DiffJson
         :old   => [],
         :new   => []
       }
+
+      calculate
     end
 
     def diff
-      calculate unless @calculated
-
       return @diff
     end
 
-    def output(output_type = :stdout)
-      calculate unless @calculated
-
+    def retrieve_output(output_type = :stdout, **output_opts)
       case output_type
       when :stdout
       when :file
       when :html
+        html_output = HtmlOutput.new(@diff, **output_opts)
+        return html_output
       end
     end
 
@@ -62,8 +62,8 @@ module DiffJson
       if old_element == new_element
         debug('Equal elements, no diff required')
 
-        old_element_lines = JSON.pretty_generate(old_element, max_nesting: false).split("\n").map{|el| [' ', "#{indentation(indent_step)}#{el}"]}
-        new_element_lines = JSON.pretty_generate(new_element, max_nesting: false).split("\n").map{|el| [' ', "#{indentation(indent_step)}#{el}"]}
+        old_element_lines = JSON.pretty_generate(old_element, max_nesting: false, quirks_mode: true).split("\n").map{|el| [' ', "#{indentation(indent_step)}#{el}"]}
+        new_element_lines = JSON.pretty_generate(new_element, max_nesting: false, quirks_mode: true).split("\n").map{|el| [' ', "#{indentation(indent_step)}#{el}"]}
       else
         unless value_type(old_element) == value_type(new_element)
           debug('Opposite type element, no diff required')
@@ -71,8 +71,8 @@ module DiffJson
           increment_diff_count(path, :insert)
           increment_diff_count(path, :delete)
           old_element_lines, new_element_lines = add_blank_lines(
-            JSON.pretty_generate(old_element, max_nesting: false).split("\n").map{|el| ['-', "#{indentation(indent_step)}#{el}"]},
-            JSON.pretty_generate(new_element, max_nesting: false).split("\n").map{|el| ['+', "#{indentation(indent_step)}#{el}"]}
+            JSON.pretty_generate(old_element, max_nesting: false, quirks_mode: true).split("\n").map{|el| ['-', "#{indentation(indent_step)}#{el}"]},
+            JSON.pretty_generate(new_element, max_nesting: false, quirks_mode: true).split("\n").map{|el| ['+', "#{indentation(indent_step)}#{el}"]}
           )
         else
           debug("Found #{value_type(old_element)}, diffing")
@@ -217,13 +217,13 @@ module DiffJson
 
           # Gather lines
           if old_item.is_a?(UndefinedValue)
-            new_item_lines = JSON.pretty_generate(new_item, max_nesting: false).split("\n").map{|il| [new_operator, "#{indentation(next_step)}#{il}"]}
+            new_item_lines = JSON.pretty_generate(new_item, max_nesting: false, quirks_mode: true).split("\n").map{|il| [new_operator, "#{indentation(next_step)}#{il}"]}
 
             (0..(new_item_lines.length - 1)).each do |i|
               old_item_lines << [' ', '']
             end
           else
-            old_item_lines = JSON.pretty_generate(old_item, max_nesting: false).split("\n").map{|il| [old_operator, "#{indentation(next_step)}#{il}"]}
+            old_item_lines = JSON.pretty_generate(old_item, max_nesting: false, quirks_mode: true).split("\n").map{|il| [old_operator, "#{indentation(next_step)}#{il}"]}
           end
 
           if new_item.is_a?(UndefinedValue)
@@ -231,7 +231,7 @@ module DiffJson
               new_item_lines << [' ', '']
             end
           else
-            new_item_lines = JSON.pretty_generate(new_item, max_nesting: false).split("\n").map{|il| [new_operator, "#{indentation(next_step)}#{il}"]}
+            new_item_lines = JSON.pretty_generate(new_item, max_nesting: false, quirks_mode: true).split("\n").map{|il| [new_operator, "#{indentation(next_step)}#{il}"]}
           end
         end
 
@@ -271,7 +271,7 @@ module DiffJson
         debug("PROCESS KEY #{k}")
 
         item_path = "#{base_path}{#{k}}"
-        key_string = "#{JSON.pretty_generate(k)}: "
+        key_string = "#{k}: "
         old_item_lines, new_item_lines = [], []
         last_loop = (k == keys['all'].last)
 
@@ -280,18 +280,18 @@ module DiffJson
             old_item_lines, new_item_lines = compare_elements(old_object[k], new_object[k], next_step, item_path)
           else
             if old_object[k] == new_object[k] or @opts[:ignore_object_keys].include?(k)
-              old_item_lines = JSON.pretty_generate(old_object[k], max_nesting: false).split("\n").map!{|il| [' ', "#{indentation(next_step)}#{il}"]}
-              new_item_lines = JSON.pretty_generate(new_object[k], max_nesting: false).split("\n").map!{|il| [' ', "#{indentation(next_step)}#{il}"]}
+              old_item_lines = JSON.pretty_generate(old_object[k], max_nesting: false, quirks_mode: true).split("\n").map!{|il| [' ', "#{indentation(next_step)}#{il}"]}
+              new_item_lines = JSON.pretty_generate(new_object[k], max_nesting: false, quirks_mode: true).split("\n").map!{|il| [' ', "#{indentation(next_step)}#{il}"]}
             else
               increment_diff_count(item_path, :update)
-              old_item_lines = JSON.pretty_generate(old_object[k], max_nesting: false).split("\n").map!{|il| ['-', "#{indentation(next_step)}#{il}"]}
-              new_item_lines = JSON.pretty_generate(new_object[k], max_nesting: false).split("\n").map!{|il| ['+', "#{indentation(next_step)}#{il}"]}
+              old_item_lines = JSON.pretty_generate(old_object[k], max_nesting: false, quirks_mode: true).split("\n").map!{|il| ['-', "#{indentation(next_step)}#{il}"]}
+              new_item_lines = JSON.pretty_generate(new_object[k], max_nesting: false, quirks_mode: true).split("\n").map!{|il| ['+', "#{indentation(next_step)}#{il}"]}
             end
           end
         else
           if keys['drop'].include?(k)
             increment_diff_count(item_path, :delete) unless @opts[:ignore_object_keys].include?(k)
-            old_item_lines = JSON.pretty_generate(old_object[k], max_nesting: false).split("\n").map!{|il| [@opts[:ignore_object_keys].include?(k) ? ' ' : '-', "#{indentation(next_step)}#{il}"]}
+            old_item_lines = JSON.pretty_generate(old_object[k], max_nesting: false, quirks_mode: true).split("\n").map!{|il| [@opts[:ignore_object_keys].include?(k) ? ' ' : '-', "#{indentation(next_step)}#{il}"]}
             new_item_lines = []
 
             (0..(old_item_lines.length - 1)).each do |i|
@@ -299,7 +299,7 @@ module DiffJson
             end
           elsif keys['add'].include?(k)
             increment_diff_count(item_path, :insert) unless @opts[:ignore_object_keys].include?(k)
-            new_item_lines = JSON.pretty_generate(new_object[k]).split("\n").map!{|il| [@opts[:ignore_object_keys].include?(k) ? ' ' : '+', "#{indentation(next_step)}#{il}"]}
+            new_item_lines = JSON.pretty_generate(new_object[k], max_nesting: false, quirks_mode: true).split("\n").map!{|il| [@opts[:ignore_object_keys].include?(k) ? ' ' : '+', "#{indentation(next_step)}#{il}"]}
             old_item_lines = []
 
             (0..(new_item_lines.length - 1)).each do |i|
@@ -452,6 +452,7 @@ module DiffJson
           )
         end
 
+        @diff[:count][:all]      += 1 if do_count
         @diff[:count][operation] += 1 if do_count
       end
     end
