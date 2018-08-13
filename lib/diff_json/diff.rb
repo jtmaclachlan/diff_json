@@ -10,12 +10,16 @@ module DiffJson
       }
     end
 
+    def diff
+      calculate unless @calculated
+
+      return @diff
+    end
+
     def output(output_type = :stdout)
       calculate unless @calculated
 
       case output_type
-      when :raw
-        return @diff
       when :stdout
       when :file
       when :html
@@ -25,24 +29,16 @@ module DiffJson
     private
 
     def calculate
-      puts [
-        '----------------------',
-        'ENTER DIFF CALCULATION',
-        '----------------------',
-        ''
-      ]
       @diff[:old], @diff[:new] = compare_elements(@old_json, @new_json)
+      @calculated = true
     end
 
     def compare_elements(old_element, new_element, indent_step = 0)
-      puts 'ENTER compare_elements'
-
       old_element_lines, new_element_lines = [], []
 
       if old_element == new_element
-        element_lines_arr = JSON.pretty_generate(old_element).split("\n").map{|el| [' ', "#{indentation(indent_step)}#{el}"]}
-        old_element_lines = element_lines_arr
-        new_element_lines = element_lines_arr
+        old_element_lines = JSON.pretty_generate(old_element).split("\n").map{|el| [' ', "#{indentation(indent_step)}#{el}"]}
+        new_element_lines = JSON.pretty_generate(new_element).split("\n").map{|el| [' ', "#{indentation(indent_step)}#{el}"]}
       else
         unless value_type(old_element) == value_type(new_element)
           old_element_lines, new_element_lines = add_blank_lines(
@@ -51,12 +47,6 @@ module DiffJson
           )
         else
           old_element_lines, new_element_lines = self.send("#{value_type(old_element)}_diff", old_element, new_element, indent_step)
-          puts [
-            'old element lines',
-            old_element_lines,
-            'New element lines',
-            new_element_lines
-          ]
         end
       end
 
@@ -64,7 +54,6 @@ module DiffJson
     end
 
     def array_diff(old_array, new_array, indent_step)
-      puts 'ENTER array_diff'
       oal, nal   = old_array.length, new_array.length
       sal        = oal < nal ? oal : nal
       lal        = oal > nal ? oal : nal
@@ -118,8 +107,6 @@ module DiffJson
 
       # Add base diff for each index
       (0..(lal - 1)).each do |i|
-        puts "PROCESS #{i}"
-
         old_item_lines, new_item_lines = [], []
         item_diff_operations = []
         last_loop = (i == (lal - 1))
@@ -147,11 +134,6 @@ module DiffJson
         )
           item_diff_operations << 'arr_drop_value'
         end
-
-        puts [
-          'Operations',
-          item_diff_operations.join(', ')
-        ]
 
         # Call compare_elements for sub-elements if necessary
         if (!(item_diff_operations & ['none', 'arr_change_value']).empty? and
@@ -189,11 +171,6 @@ module DiffJson
             end
           end
 
-          puts [
-            'Operators',
-            "#{old_operator.inspect}, #{new_operator.inspect}"
-          ]
-
           # Gather lines
           if old_item.is_a?(UndefinedValue)
             new_item_lines = JSON.pretty_generate(new_item).split("\n").map{|il| [new_operator, "#{indentation(next_step)}#{il}"]}
@@ -214,6 +191,13 @@ module DiffJson
           end
         end
 
+        unless old_item_lines.empty?
+          old_item_lines.last[1] = "#{old_item_lines.last[1]}," if !last_loop and (old_item_lines.last[1].match(/[^\s]/))
+        end
+        unless new_item_lines.empty?
+          new_item_lines.last[1] = "#{new_item_lines.last[1]}," if !last_loop and (new_item_lines.last[1].match(/[^\s]/))
+        end
+
         old_item_lines, new_item_lines = add_blank_lines(old_item_lines, new_item_lines)
 
         old_array_lines += old_item_lines
@@ -227,8 +211,6 @@ module DiffJson
     end
 
     def object_diff(old_object, new_object, indent_step)
-      puts 'ENTER object_diff'
-
       keys = {
         'all'    => (old_object.keys | new_object.keys),
         'common' => (old_object.keys & new_object.keys),
@@ -240,8 +222,6 @@ module DiffJson
 
       # For objects, we're taking a much simpler approach, so no movements
       keys['all'].each do |k|
-        puts "PROCESS #{k}"
-
         key_string = "#{JSON.pretty_generate(k)}: "
         old_item_lines, new_item_lines = [], []
         last_loop = (k == keys['all'].last)
@@ -249,16 +229,9 @@ module DiffJson
         if keys['common'].include?(k)
           if is_json_element?(old_object[k]) and is_json_element?(new_object[k])
             old_item_lines, new_item_lines = compare_elements(old_object[k], new_object[k], (next_step))
-
           else
-            if old_object[k] == new_object[k]
-              item_lines = JSON.pretty_generate(old_object[k]).split("\n").map!{|il| [' ', "#{indentation(next_step)}#{il}"]}
-              old_item_lines = item_lines.dup
-              new_item_lines = item_lines.dup
-            else
-              old_item_lines = JSON.pretty_generate(old_object[k]).split("\n").map!{|il| ['-', "#{indentation(next_step)}#{il}"]}
-              new_item_lines = JSON.pretty_generate(new_object[k]).split("\n").map!{|il| ['+', "#{indentation(next_step)}#{il}"]}
-            end
+            old_item_lines = JSON.pretty_generate(old_object[k]).split("\n").map!{|il| ['-', "#{indentation(next_step)}#{il}"]}
+            new_item_lines = JSON.pretty_generate(new_object[k]).split("\n").map!{|il| ['+', "#{indentation(next_step)}#{il}"]}
           end
         else
           if keys['drop'].include?(k)
@@ -280,9 +253,11 @@ module DiffJson
 
         unless old_item_lines.empty?
           old_item_lines[0][1].gsub!(/^(?<spaces>\s+)(?<content>.+)$/, "\\k<spaces>#{key_string}\\k<content>")
+          old_item_lines.last[1] = "#{old_item_lines.last[1]}," if !last_loop and (old_item_lines.last[1].match(/[^\s]/))
         end
         unless new_item_lines.empty?
           new_item_lines[0][1].gsub!(/^(?<spaces>\s+)(?<content>.+)$/, "\\k<spaces>#{key_string}\\k<content>")
+          new_item_lines.last[1] = "#{new_item_lines.last[1]}," if !last_loop and (new_item_lines.last[1].match(/[^\s]/))
         end
 
         old_item_lines, new_item_lines = add_blank_lines(old_item_lines, new_item_lines)
