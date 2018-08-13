@@ -266,7 +266,7 @@ module DiffJson
             (0..(old_item_lines.length - 1)).each do |i|
               new_item_lines << [' ', '']
             end
-          else
+          elsif keys['add'].include?(k)
             new_item_lines = JSON.pretty_generate(new_object[k]).split("\n").map!{|il| [@opts[:ignore_object_keys].include?(k) ? ' ' : '+', "#{indentation(next_step)}#{il}"]}
             old_item_lines = []
 
