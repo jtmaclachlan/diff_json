@@ -3,8 +3,12 @@ module DiffJson
     def initialize(old_json, new_json, **opts)
       @old_json   = old_json
       @new_json   = new_json
+      @opts       = {
+        :debug              => false,
+        :ignore_object_keys => []
+      }.merge(opts)
       @calculated = false
-      @diff = {
+      @diff       = {
         :old => [],
         :new => []
       }
@@ -34,18 +38,26 @@ module DiffJson
     end
 
     def compare_elements(old_element, new_element, indent_step = 0)
+      debug('ENTER compare_elements')
+
       old_element_lines, new_element_lines = [], []
 
       if old_element == new_element
+        debug('Equal elements, no diff required')
+
         old_element_lines = JSON.pretty_generate(old_element).split("\n").map{|el| [' ', "#{indentation(indent_step)}#{el}"]}
         new_element_lines = JSON.pretty_generate(new_element).split("\n").map{|el| [' ', "#{indentation(indent_step)}#{el}"]}
       else
         unless value_type(old_element) == value_type(new_element)
+          debug('Opposite type element, no diff required')
+
           old_element_lines, new_element_lines = add_blank_lines(
             JSON.pretty_generate(old_element).split("\n").map{|el| ['-', "#{indentation(indent_step)}#{el}"]},
             JSON.pretty_generate(new_element).split("\n").map{|el| ['+', "#{indentation(indent_step)}#{el}"]}
           )
         else
+          debug("Found #{value_type(old_element)}, diffing")
+
           old_element_lines, new_element_lines = self.send("#{value_type(old_element)}_diff", old_element, new_element, indent_step)
         end
       end
@@ -54,6 +66,8 @@ module DiffJson
     end
 
     def array_diff(old_array, new_array, indent_step)
+      debug('ENTER array_diff')
+
       oal, nal   = old_array.length, new_array.length
       sal        = oal < nal ? oal : nal
       lal        = oal > nal ? oal : nal
@@ -107,6 +121,8 @@ module DiffJson
 
       # Add base diff for each index
       (0..(lal - 1)).each do |i|
+        debug("PROCESS INDEX #{i}")
+
         old_item_lines, new_item_lines = [], []
         item_diff_operations = []
         last_loop = (i == (lal - 1))
@@ -211,6 +227,8 @@ module DiffJson
     end
 
     def object_diff(old_object, new_object, indent_step)
+      debug('ENTER object_diff')
+
       keys = {
         'all'    => (old_object.keys | new_object.keys),
         'common' => (old_object.keys & new_object.keys),
@@ -222,6 +240,8 @@ module DiffJson
 
       # For objects, we're taking a much simpler approach, so no movements
       keys['all'].each do |k|
+        debug("PROCESS KEY #{k}")
+
         key_string = "#{JSON.pretty_generate(k)}: "
         old_item_lines, new_item_lines = [], []
         last_loop = (k == keys['all'].last)
@@ -230,8 +250,13 @@ module DiffJson
           if is_json_element?(old_object[k]) and is_json_element?(new_object[k])
             old_item_lines, new_item_lines = compare_elements(old_object[k], new_object[k], (next_step))
           else
-            old_item_lines = JSON.pretty_generate(old_object[k]).split("\n").map!{|il| ['-', "#{indentation(next_step)}#{il}"]}
-            new_item_lines = JSON.pretty_generate(new_object[k]).split("\n").map!{|il| ['+', "#{indentation(next_step)}#{il}"]}
+            if old_object[k] == new_object[k]
+              old_item_lines = JSON.pretty_generate(old_object[k]).split("\n").map!{|il| [' ', "#{indentation(next_step)}#{il}"]}
+              new_item_lines = JSON.pretty_generate(new_object[k]).split("\n").map!{|il| [' ', "#{indentation(next_step)}#{il}"]}
+            else
+              old_item_lines = JSON.pretty_generate(old_object[k]).split("\n").map!{|il| ['-', "#{indentation(next_step)}#{il}"]}
+              new_item_lines = JSON.pretty_generate(new_object[k]).split("\n").map!{|il| ['+', "#{indentation(next_step)}#{il}"]}
+            end
           end
         else
           if keys['drop'].include?(k)
@@ -270,6 +295,10 @@ module DiffJson
       new_object_lines << [' ', "#{indentation(indent_step)}}"]
 
       return old_object_lines, new_object_lines
+    end
+
+    def debug(message)
+      puts message if @opts[:debug]
     end
 
     def array_indices(array, value)
