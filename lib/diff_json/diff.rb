@@ -63,7 +63,8 @@ module DiffJson
         unless value_type(old_element) == value_type(new_element)
           debug('Opposite type element, no diff required')
 
-          increment_diff_count(1, item_path)
+          increment_diff_count(path, 'insert')
+          increment_diff_count(path, 'delete')
           old_element_lines, new_element_lines = add_blank_lines(
             JSON.pretty_generate(old_element, max_nesting: false).split("\n").map{|el| ['-', "#{indentation(indent_step)}#{el}"]},
             JSON.pretty_generate(new_element, max_nesting: false).split("\n").map{|el| ['+', "#{indentation(indent_step)}#{el}"]}
@@ -71,6 +72,7 @@ module DiffJson
         else
           debug("Found #{value_type(old_element)}, diffing")
 
+          increment_diff_count(path, 'update')
           old_element_lines, new_element_lines = self.send("#{value_type(old_element)}_diff", old_element, new_element, indent_step, path)
         end
       end
@@ -180,31 +182,30 @@ module DiffJson
           if item_diff_operations.include?('none')
             old_operator, new_operator = ' '
           elsif item_diff_operations.include?('arr_change_value')
-            increment_diff_count(1, item_path)
+            increment_diff_count(item_path, 'update')
             old_operator, new_operator = '-', '+'
           elsif (item_diff_operations & ['arr_send_move', 'arr_receive_move']).length == 2
-            increment_diff_count(1, item_path)
+            increment_diff_count(item_path, 'move')
             old_operator, new_operator = 'M', 'M'
           elsif item_diff_operations.include?('arr_add_value')
-            increment_diff_count(2, item_path)
+            increment_diff_count(item_path, 'insert')
             old_operator, new_operator = 'M', '+'
           elsif item_diff_operations.include?('arr_drop_value')
-            increment_diff_count(2, item_path)
+            increment_diff_count(item_path, 'delete')
             old_operator, new_operator = '-', 'M'
           elsif item_diff_operations.include?('arr_drop_index')
-            increment_diff_count(1, item_path)
-
             if item_diff_operations.include?('arr_send_move')
+              increment_diff_count(item_path, 'move')
               old_operator, new_operator = 'M', ' '
             else
+              increment_diff_count(item_path, 'delete')
               old_operator, new_operator = '-', ' '
             end
           elsif item_diff_operations.include?('arr_add_index')
-            increment_diff_count(1, item_path)
-
             if item_diff_operations.include?('arr_receive_move')
               old_operator, new_operator = ' ', 'M'
             else
+              increment_diff_count(item_path, 'insert')
               old_operator, new_operator = ' ', '+'
             end
           end
@@ -277,14 +278,14 @@ module DiffJson
               old_item_lines = JSON.pretty_generate(old_object[k], max_nesting: false).split("\n").map!{|il| [' ', "#{indentation(next_step)}#{il}"]}
               new_item_lines = JSON.pretty_generate(new_object[k], max_nesting: false).split("\n").map!{|il| [' ', "#{indentation(next_step)}#{il}"]}
             else
-              increment_diff_count(1, item_path)
+              increment_diff_count(item_path, 'update')
               old_item_lines = JSON.pretty_generate(old_object[k], max_nesting: false).split("\n").map!{|il| ['-', "#{indentation(next_step)}#{il}"]}
               new_item_lines = JSON.pretty_generate(new_object[k], max_nesting: false).split("\n").map!{|il| ['+', "#{indentation(next_step)}#{il}"]}
             end
           end
         else
           if keys['drop'].include?(k)
-            increment_diff_count(1, item_path) unless @opts[:ignore_object_keys].include?(k)
+            increment_diff_count(item_path, 'delete') unless @opts[:ignore_object_keys].include?(k)
             old_item_lines = JSON.pretty_generate(old_object[k], max_nesting: false).split("\n").map!{|il| [@opts[:ignore_object_keys].include?(k) ? ' ' : '-', "#{indentation(next_step)}#{il}"]}
             new_item_lines = []
 
@@ -292,7 +293,7 @@ module DiffJson
               new_item_lines << [' ', '']
             end
           elsif keys['add'].include?(k)
-            increment_diff_count(1, item_path) unless @opts[:ignore_object_keys].include?(k)
+            increment_diff_count(item_path, 'insert') unless @opts[:ignore_object_keys].include?(k)
             new_item_lines = JSON.pretty_generate(new_object[k]).split("\n").map!{|il| [@opts[:ignore_object_keys].include?(k) ? ' ' : '+', "#{indentation(next_step)}#{il}"]}
             old_item_lines = []
 
@@ -373,14 +374,9 @@ module DiffJson
       return left_lines, right_lines
     end
 
-    def increment_diff_count(diff_num, path)
-      debug([
-        'ENTER increment_diff_count',
-        diff_num,
-        path
-      ])
+    def increment_diff_count(path, operation)
       unless @filtered
-        @diff[:count] += diff_num
+        @diff[:count] += 1
       else
         do_count = false
 
@@ -390,20 +386,11 @@ module DiffJson
           @opts[:diff_count_filter][:only].is_a?(Array)
         )
           @opts[:diff_count_filter][:only].each do |only_path|
-            debug([
-              'Attempt only path match',
-              only_path
-            ])
             only_path_prefix   = only_path.gsub(/\*/, '')
             only_path_wildcard = only_path.gsub(/[^\*]/, '')
 
             if path.include?(only_path_prefix)
               path_remainder = path.gsub(only_path_prefix, '').split(/(\]\[|\]\{|\}\[|\}\{)/)
-
-              debug([
-                path_remainder,
-                only_path_wildcard
-              ])
 
               if (
                 (path_remainder.length == 0 and only_path_wildcard.length == 0) or
@@ -446,7 +433,19 @@ module DiffJson
           end
         end
 
-        @diff[:count] += diff_num if do_count
+        # Ensure this operation is allowed for counting
+        if (
+          do_count and
+          @opts[:diff_count_filter].key?(:operations) and
+          @opts[:diff_count_filter][:operations].is_a?(Array)
+        )
+          do_count = false if (
+            !@opts[:diff_count_filter][:operations].empty? and
+            !@opts[:diff_count_filter][:operations].include?(operation)
+          )
+        end
+
+        @diff[:count] += 1 if do_count
       end
     end
   end
