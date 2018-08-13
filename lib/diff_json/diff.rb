@@ -5,9 +5,14 @@ module DiffJson
       @new_json   = new_json
       @opts       = {
         :debug              => false,
-        :ignore_object_keys => []
+        :ignore_object_keys => [],
+        :diff_count_filter  => {
+          :only   => ['$**'],
+          :except => []
+        }
       }.merge(opts)
       @calculated = false
+      @diff_ct    = 0
       @diff       = {
         :old => [],
         :new => []
@@ -37,8 +42,11 @@ module DiffJson
       @calculated = true
     end
 
-    def compare_elements(old_element, new_element, indent_step = 0)
-      debug('ENTER compare_elements')
+    def compare_elements(old_element, new_element, indent_step = 0, path = '$')
+      debug([
+        'ENTER compare_elements',
+        "Diffing #{path}"
+      ])
 
       old_element_lines, new_element_lines = [], []
 
@@ -58,14 +66,14 @@ module DiffJson
         else
           debug("Found #{value_type(old_element)}, diffing")
 
-          old_element_lines, new_element_lines = self.send("#{value_type(old_element)}_diff", old_element, new_element, indent_step)
+          old_element_lines, new_element_lines = self.send("#{value_type(old_element)}_diff", old_element, new_element, indent_step, path)
         end
       end
 
       return old_element_lines, new_element_lines
     end
 
-    def array_diff(old_array, new_array, indent_step)
+    def array_diff(old_array, new_array, indent_step, base_path)
       debug('ENTER array_diff')
 
       oal, nal   = old_array.length, new_array.length
@@ -155,7 +163,8 @@ module DiffJson
         if (!(item_diff_operations & ['none', 'arr_change_value']).empty? and
           is_json_element?(old_array[i]) and is_json_element?(new_array[i])
         )
-          old_item_lines, new_item_lines = compare_elements(old_array[i], new_array[i], (next_step))
+          sub_path = "#{base_path}[#{i}]"
+          old_item_lines, new_item_lines = compare_elements(old_array[i], new_array[i], next_step, sub_path)
         else
           # Grab old and new items
           # UndefinedValue class is here to represent the difference between explicit null and non-existent
@@ -226,7 +235,7 @@ module DiffJson
       return old_array_lines, new_array_lines
     end
 
-    def object_diff(old_object, new_object, indent_step)
+    def object_diff(old_object, new_object, indent_step, base_path)
       debug('ENTER object_diff')
 
       keys = {
@@ -248,7 +257,8 @@ module DiffJson
 
         if keys['common'].include?(k)
           if is_json_element?(old_object[k]) and is_json_element?(new_object[k]) and !@opts[:ignore_object_keys].include?(k)
-            old_item_lines, new_item_lines = compare_elements(old_object[k], new_object[k], (next_step))
+            sub_path = "#{base_path}{#{k}}"
+            old_item_lines, new_item_lines = compare_elements(old_object[k], new_object[k], next_step, sub_path)
           else
             if old_object[k] == new_object[k] or @opts[:ignore_object_keys].include?(k)
               old_item_lines = JSON.pretty_generate(old_object[k]).split("\n").map!{|il| [' ', "#{indentation(next_step)}#{il}"]}
