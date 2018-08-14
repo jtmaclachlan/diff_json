@@ -11,11 +11,11 @@ module DiffJson
           :except => []
         }
       }.merge(opts)
-      @filtered   = @opts[:diff_count_filter] != {
+      @filtered = @opts[:diff_count_filter] != {
         :only   => ['$**'],
         :except => []
       }
-      @diff       = {
+      @diff = {
         :count => {
           :all    => 0,
           :insert => 0,
