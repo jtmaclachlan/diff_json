@@ -5,11 +5,12 @@ module DiffJson
       @new_json   = new_json
       @opts       = {
         :debug              => false,
-        :ignore_object_keys => [],
         :diff_count_filter  => {
           :only   => ['$**'],
           :except => []
-        }
+        },
+        :ignore_object_keys => [],
+        :create_sub_diffs   => {}
       }.merge(opts)
       @filtered = @opts[:diff_count_filter] != {
         :only   => ['$**'],
@@ -23,8 +24,11 @@ module DiffJson
           :delete => 0,
           :move   => 0
         },
-        :old   => [],
-        :new   => []
+        :full_diff => {
+          :old   => [],
+          :new   => []
+        },
+        :sub_diffs => {}
       }
 
       calculate
@@ -47,7 +51,7 @@ module DiffJson
     private
 
     def calculate
-      @diff[:old], @diff[:new] = compare_elements(@old_json, @new_json)
+      @diff[:full_diff][:old], @diff[:full_diff][:new] = compare_elements(@old_json, @new_json)
       @calculated = true
     end
 
@@ -388,28 +392,20 @@ module DiffJson
         # Any path prefixes in `only` that match?
         if (
           @opts[:diff_count_filter].key?(:only) and
-          @opts[:diff_count_filter][:only].is_a?(Array)
+          @opts[:diff_count_filter][:only].is_a?(Array) and
+          !@opts[:diff_count_filter][:only].empty?
         )
           @opts[:diff_count_filter][:only].each do |only_path|
-            only_path_prefix   = only_path.gsub(/\*/, '')
-            only_path_wildcard = only_path.gsub(/[^\*]/, '')
-
-            if path.include?(only_path_prefix)
-              path_remainder = path.gsub(only_path_prefix, '').split(/(\]\[|\]\{|\}\[|\}\{)/)
-
-              if (
-                (path_remainder.length == 0 and only_path_wildcard.length == 0) or
-                (path_remainder.length == 1 and only_path_wildcard.length > 0) or
-                (path_remainder.length > 1 and only_path_wildcard.length > 1)
-              )
-                do_count = true
-                break
-              end
-            else
+            case path_inclusion(path, only_path)
+            when 'exact', 'level', 'full'
+              do_count = true
+              break
+            when nil
               next
             end
           end
         else
+          # If :only is empty or non-existent, count everything
           do_count = true
         end
 
@@ -417,24 +413,15 @@ module DiffJson
         if (
           do_count and
           @opts[:diff_count_filter].key?(:except) and
-          @opts[:diff_count_filter][:except].is_a?(Array)
+          @opts[:diff_count_filter][:except].is_a?(Array) and
+          !@opts[:diff_count_filter][:except].empty?
         )
           @opts[:diff_count_filter][:except].each do |except_path|
-            except_path_prefix   = except_path.gsub(/\*/, '')
-            except_path_wildcard = except_path.gsub(/[^\*]/, '') || ''
-
-            if path.include?(except_path_prefix)
-              path_remainder = path.gsub(except_path_prefix, '').split(/(\]\[|\]\{|\}\[|\}\{)/)
-
-              if (
-                (path_remainder.length == 0 and except_path_wildcard.length == 0) or
-                (path_remainder.length == 1 and except_path_wildcard.length > 0) or
-                (path_remainder.length > 1 and except_path_wildcard.length > 1)
-              )
-                do_count = false
-                break
-              end
-            else
+            case path_inclusion(path, except_path)
+            when 'exact', 'level', 'full'
+              do_count = true
+              break
+            when nil
               next
             end
           end
@@ -454,6 +441,21 @@ module DiffJson
 
         @diff[:count][:all]      += 1 if do_count
         @diff[:count][operation] += 1 if do_count
+      end
+    end
+
+    def path_inclusion(current_path, check_path)
+      check_path_prefix = check_path.gsub(/\*/, '')
+      check_path_wildcard = check_path.gsub(/[^\*]/, '') || ''
+
+      if current_path.include?(check_path_prefix)
+        current_path_remainder = current_path.gsub(check_path_prefix, '').split(/(\]\[|\]\{|\}\[|\}\{)/)
+
+        return 'exact' if (current_path_remainder.length == 0 and check_path_wildcard.length == 0)
+        return 'level' if (current_path_remainder.length == 1 and check_path_wildcard.length > 0)
+        return 'full' if (current_path_remainder.length > 1 and check_path_wildcard.length > 1)
+      else
+        return nil
       end
     end
   end
