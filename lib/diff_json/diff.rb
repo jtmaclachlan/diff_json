@@ -9,8 +9,8 @@ module DiffJson
           :only   => ['$**'],
           :except => []
         },
-        :ignore_object_keys => [],
-        :create_sub_diffs   => {}
+        :ignore_object_keys        => [],
+        :generate_object_sub_diffs => {}
       }.merge(opts)
       @filtered = @opts[:diff_count_filter] != {
         :only   => ['$**'],
@@ -52,7 +52,16 @@ module DiffJson
 
     def calculate
       @diff[:full_diff][:old], @diff[:full_diff][:new] = compare_elements(@old_json, @new_json)
-      @calculated = true
+
+      @diff[:sub_diffs].each do |key, sub_diffs|
+        sub_diffs.each do |value, diff|
+          diff[:old] = [] unless diff.key?(:old)
+          diff[:new] = [] unless diff.key?(:new)
+          diff[:old].delete_if{|line| line == [' ', '']}
+          diff[:new].delete_if{|line| line == [' ', '']}
+          diff[:old], diff[:new] = add_blank_lines(diff[:old], diff[:new])
+        end
+      end
     end
 
     def compare_elements(old_element, new_element, indent_step = 0, path = '$')
@@ -248,6 +257,9 @@ module DiffJson
 
         old_item_lines, new_item_lines = add_blank_lines(old_item_lines, new_item_lines)
 
+        add_object_sub_diff_if_required(item_path, old_item, old_item_lines) if old_item.is_a?(Hash) and old_operator == '-'
+        add_object_sub_diff_if_required(item_path, new_item, new_item_lines, :new) if new_item.is_a?(Hash) and new_operator == '+'
+
         old_array_lines += old_item_lines
         new_array_lines += new_item_lines
       end
@@ -275,7 +287,7 @@ module DiffJson
         debug("PROCESS KEY #{k}")
 
         item_path = "#{base_path}{#{k}}"
-        key_string = "#{k}: "
+        key_string = "#{JSON.pretty_generate(k)}: "
         old_item_lines, new_item_lines = [], []
         last_loop = (k == keys['all'].last)
 
@@ -329,6 +341,9 @@ module DiffJson
 
       old_object_lines << [' ', "#{indentation(indent_step)}}"]
       new_object_lines << [' ', "#{indentation(indent_step)}}"]
+
+      add_object_sub_diff_if_required(base_path, old_object, old_object_lines)
+      add_object_sub_diff_if_required(base_path, new_object, new_object_lines, :new)
 
       return old_object_lines, new_object_lines
     end
@@ -396,11 +411,10 @@ module DiffJson
           !@opts[:diff_count_filter][:only].empty?
         )
           @opts[:diff_count_filter][:only].each do |only_path|
-            case path_inclusion(path, only_path)
-            when 'exact', 'level', 'full'
+            unless ['none', 'lower'].include?(path_inclusion(path, only_path))
               do_count = true
               break
-            when nil
+            else
               next
             end
           end
@@ -417,11 +431,10 @@ module DiffJson
           !@opts[:diff_count_filter][:except].empty?
         )
           @opts[:diff_count_filter][:except].each do |except_path|
-            case path_inclusion(path, except_path)
-            when 'exact', 'level', 'full'
-              do_count = true
+            unless ['none', 'lower'].include?(path_inclusion(path, except_path))
+              do_count = false
               break
-            when nil
+            else
               next
             end
           end
@@ -452,10 +465,27 @@ module DiffJson
         current_path_remainder = current_path.gsub(check_path_prefix, '').split(/(\]\[|\]\{|\}\[|\}\{)/)
 
         return 'exact' if (current_path_remainder.length == 0 and check_path_wildcard.length == 0)
-        return 'level' if (current_path_remainder.length == 1 and check_path_wildcard.length > 0)
-        return 'full' if (current_path_remainder.length > 1 and check_path_wildcard.length > 1)
+        return 'level' if (current_path_remainder.length == 1 and check_path_wildcard == '*')
+        return 'full'  if (current_path_remainder.length > 0 and check_path_wildcard == '**')
+        return 'lower' if (current_path_remainder.length > 0)
       else
-        return nil
+        return 'none'
+      end
+    end
+
+    def add_object_sub_diff_if_required(object_path, object, lines, side = :old)
+      if (
+        @opts.key?(:generate_object_sub_diffs) and
+        @opts[:generate_object_sub_diffs].is_a?(Hash) and
+        !@opts[:generate_object_sub_diffs].empty?
+      )
+        @opts[:generate_object_sub_diffs].each do |k,v|
+          unless ['none', 'lower'].include?(path_inclusion(object_path, k))
+            @diff[:sub_diffs][v] = {} unless @diff[:sub_diffs].key?(v)
+            @diff[:sub_diffs][v][object[v]] = {} unless @diff[:sub_diffs][v].key?(object[v])
+            @diff[:sub_diffs][v][object[v]][side] = lines if object.key?(v)
+          end
+        end
       end
     end
   end
