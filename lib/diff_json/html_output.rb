@@ -7,60 +7,84 @@ module DiffJson
         :table_id_prefix => 'diff_json_view_0'
       }.merge(opts)
       @output = {
-        :full  => "",
-        :left  => "",
-        :right => "",
+        :full_diff => {},
         :sub_diffs => {}
       }
 
       calculate
     end
 
+    def output
+      return @output
+    end
+
     def full
-      return @output[:full]
+      return @output[:full_diff][:full]
     end
 
     def left
-      return @output[:left]
+      return @output[:full_diff][:left]
     end
 
     def right
-      return @output[:right]
+      return @output[:full_diff][:right]
+    end
+
+    def sub_diffs
+      return @output[:sub_diffs]
     end
 
     private
 
     def calculate
-      @output = {
-        :full  => "<table id=\"#{@opts[:table_id_prefix]}_full\" class=\"diff-json-full-view\">\n",
-        :left  => "<table id=\"#{@opts[:table_id_prefix]}_left\" class=\"diff-json-split-view-left\">\n",
-        :right => "<table id=\"#{@opts[:table_id_prefix]}_right\" class=\"diff-json-split-view-right\">\n"
+      @output[:full_diff] = table_markup(@opts[:table_id_prefix], @diff[:full_diff])
+
+      @diff[:sub_diffs].each do |key, sub_diffs|
+        sub_diffs.each do |value, diff|
+          sub_key = "#{key}::#{value}"
+          table_key = "#{key}_#{value}"
+          @output[:sub_diffs][sub_key] = table_markup("#{@opts[:table_id_prefix]}_sub_diff_#{table_key}", diff)
+        end
+      end
+    end
+
+    def table_markup(table_id_prefix, lines)
+      markup = {
+        :full  => "",
+        :left  => "",
+        :right => ""
       }
 
-      (0..(@diff[:full_diff][:old].length - 1)).each do |i|
+      markup[:full]  = "<table id=\"#{table_id_prefix}_full\" class=\"diff-json-full-view\">\n"
+      markup[:left]  = "<table id=\"#{table_id_prefix}_left\" class=\"diff-json-split-view-left\">\n"
+      markup[:right] = "<table id=\"#{table_id_prefix}_right\" class=\"diff-json-split-view-right\">\n"
+
+      (0..(lines[:old].length - 1)).each do |i|
         # Full, combined table output
-        @output[:full]  += "<tr class=\"diff-json-view-line\">\n"
-        @output[:full]  += "<td class=\"diff-json-view-line-operator\">#{@diff[:full_diff][:old][i][0].gsub(/\s/, '&nbsp;')}</td>\n"
-        @output[:full]  += "<td class=\"diff-json-view-line-content #{content_highlight_class(:left, @diff[:full_diff][:old][i][0])}\">#{@diff[:full_diff][:old][i][1].gsub(/\s/, '&nbsp;')}</td>\n"
-        @output[:full]  += "<td class=\"diff-json-view-column-break\"></td>\n"
-        @output[:full]  += "<td class=\"diff-json-view-line-operator\">#{@diff[:full_diff][:new][i][0].gsub(/\s/, '&nbsp;')}</td>\n"
-        @output[:full]  += "<td class=\"diff-json-view-line-content #{content_highlight_class(:right, @diff[:full_diff][:new][i][0])}\">#{@diff[:full_diff][:new][i][1].gsub(/\s/, '&nbsp;')}</td>\n"
-        @output[:full]  += "</tr>\n"
+        markup[:full]  += "<tr class=\"diff-json-view-line\">\n"
+        markup[:full]  += "<td class=\"diff-json-view-line-operator\">#{lines[:old][i][0].gsub(/\s/, '&nbsp;')}</td>\n"
+        markup[:full]  += "<td class=\"diff-json-view-line-content #{content_highlight_class(:left, lines[:old][i][0])}\">#{lines[:old][i][1].gsub(/\s/, '&nbsp;')}</td>\n"
+        markup[:full]  += "<td class=\"diff-json-view-column-break\"></td>\n"
+        markup[:full]  += "<td class=\"diff-json-view-line-operator\">#{lines[:new][i][0].gsub(/\s/, '&nbsp;')}</td>\n"
+        markup[:full]  += "<td class=\"diff-json-view-line-content #{content_highlight_class(:right, lines[:new][i][0])}\">#{lines[:new][i][1].gsub(/\s/, '&nbsp;')}</td>\n"
+        markup[:full]  += "</tr>\n"
         # Split, left side output
-        @output[:left]  += "<tr class=\"diff-json-view-line\">\n"
-        @output[:left]  += "<td class=\"diff-json-view-line-operator\">#{@diff[:full_diff][:old][i][0].gsub(/\s/, '&nbsp;')}</td>\n"
-        @output[:left]  += "<td class=\"diff-json-view-line-content #{content_highlight_class(:left, @diff[:full_diff][:old][i][0])}\">#{@diff[:full_diff][:old][i][1].gsub(/\s/, '&nbsp;')}</td>\n"
-        @output[:left]  += "</tr>\n"
+        markup[:left]  += "<tr class=\"diff-json-view-line\">\n"
+        markup[:left]  += "<td class=\"diff-json-view-line-operator\">#{lines[:old][i][0].gsub(/\s/, '&nbsp;')}</td>\n"
+        markup[:left]  += "<td class=\"diff-json-view-line-content #{content_highlight_class(:left, lines[:old][i][0])}\">#{lines[:old][i][1].gsub(/\s/, '&nbsp;')}</td>\n"
+        markup[:left]  += "</tr>\n"
         # Split, right side output
-        @output[:right] += "<tr class=\"diff-json-view-line\">\n"
-        @output[:right] += "<td class=\"diff-json-view-line-operator\">#{@diff[:full_diff][:new][i][0].gsub(/\s/, '&nbsp;')}</td>\n"
-        @output[:right] += "<td class=\"diff-json-view-line-content #{content_highlight_class(:right, @diff[:full_diff][:new][i][0])}\">#{@diff[:full_diff][:new][i][1].gsub(/\s/, '&nbsp;')}</td>\n"
-        @output[:right] += "</tr>\n"
+        markup[:right] += "<tr class=\"diff-json-view-line\">\n"
+        markup[:right] += "<td class=\"diff-json-view-line-operator\">#{lines[:new][i][0].gsub(/\s/, '&nbsp;')}</td>\n"
+        markup[:right] += "<td class=\"diff-json-view-line-content #{content_highlight_class(:right, lines[:new][i][0])}\">#{lines[:new][i][1].gsub(/\s/, '&nbsp;')}</td>\n"
+        markup[:right] += "</tr>\n"
       end
 
-      @output[:full]  += "</table>\n"
-      @output[:left]  += "</table>\n"
-      @output[:right] += "</table>\n"
+      markup[:full]  += "</table>\n"
+      markup[:left]  += "</table>\n"
+      markup[:right] += "</table>\n"
+
+      return markup
     end
 
     def content_highlight_class(side, operator)
