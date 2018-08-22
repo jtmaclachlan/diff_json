@@ -35,7 +35,15 @@ module DiffJson
     end
 
     def diff
-      return @diff
+      return @diff[:full_diff]
+    end
+
+    def sub_diffs
+      return @diff[:sub_diffs]
+    end
+
+    def change_count(operation = :all)
+      return @diff[:count][operation] || 0
     end
 
     def retrieve_output(output_type = :stdout, **output_opts)
@@ -43,7 +51,7 @@ module DiffJson
       when :stdout
       when :file
       when :html
-        html_output = HtmlOutput.new(@diff, **output_opts)
+        html_output = HtmlOutput.new(self, **output_opts)
         return html_output
       end
     end
@@ -287,7 +295,7 @@ module DiffJson
         debug("PROCESS KEY #{k}")
 
         item_path = "#{base_path}{#{k}}"
-        key_string = "#{JSON.pretty_generate(k)}: "
+        key_string = "#{JSON.pretty_generate(k, max_nesting: false, quirks_mode: true)}: "
         old_item_lines, new_item_lines = [], []
         last_loop = (k == keys['all'].last)
 
@@ -452,25 +460,32 @@ module DiffJson
           )
         end
 
+        debug("Post-operation, #{do_count}")
+
         @diff[:count][:all]      += 1 if do_count
         @diff[:count][operation] += 1 if do_count
       end
     end
 
     def path_inclusion(current_path, check_path)
-      check_path_prefix = check_path.gsub(/\*/, '')
+      check_path_base     = check_path.gsub(/\*/, '')
       check_path_wildcard = check_path.gsub(/[^\*]/, '') || ''
+      check               = 'lower'
 
-      if current_path.include?(check_path_prefix)
-        current_path_remainder = current_path.gsub(check_path_prefix, '').split(/(\]\[|\]\{|\}\[|\}\{)/)
+      if current_path == check_path_base
+        check = 'exact' if check_path_wildcard == ''
+        check = 'lower'
+      elsif current_path.include?(check_path_base)
+        current_path_remainder = current_path.gsub(check_path_base, '')
+        current_path_remainder_steps = current_path_remainder.split(/(\]\[|\]\{|\}\[|\}\{)/)
 
-        return 'exact' if (current_path_remainder.length == 0 and check_path_wildcard.length == 0)
-        return 'level' if (current_path_remainder.length == 1 and check_path_wildcard == '*')
-        return 'full'  if (current_path_remainder.length > 0 and check_path_wildcard == '**')
-        return 'lower' if (current_path_remainder.length > 0)
+        check = 'level'   if (current_path_remainder_steps.length == 1 and check_path_wildcard == '*')
+        check = 'recurse' if (current_path_remainder_steps.length > 0 and check_path_wildcard == '**')
       else
-        return 'none'
+        check = 'none'
       end
+
+      return check
     end
 
     def add_object_sub_diff_if_required(object_path, object, lines, side = :old)

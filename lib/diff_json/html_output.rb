@@ -14,10 +14,6 @@ module DiffJson
       calculate
     end
 
-    def output
-      return @output
-    end
-
     def full
       return @output[:full_diff][:full]
     end
@@ -37,9 +33,9 @@ module DiffJson
     private
 
     def calculate
-      @output[:full_diff] = table_markup(@opts[:table_id_prefix], @diff[:full_diff])
+      @output[:full_diff] = table_markup(@opts[:table_id_prefix], @diff.diff)
 
-      @diff[:sub_diffs].each do |key, sub_diffs|
+      @diff.sub_diffs.each do |key, sub_diffs|
         sub_diffs.each do |value, diff|
           sub_key = "#{key}::#{value}"
           table_key = "#{key}_#{value}"
