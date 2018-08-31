@@ -206,7 +206,7 @@ module DiffJson
 
           # Figure out operators for left and right
           if item_diff_operations.include?('none')
-            old_operator, new_operator = ' '
+            old_operator, new_operator = ' ', ' '
           elsif item_diff_operations.include?('arr_change_value')
             increment_diff_count(item_path, :update)
             old_operator, new_operator = '-', '+'
