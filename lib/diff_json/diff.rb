@@ -65,8 +65,7 @@ module DiffJson
         sub_diffs.each do |value, diff|
           diff[:old] = [] unless diff.key?(:old)
           diff[:new] = [] unless diff.key?(:new)
-          diff[:old].delete_if{|line| line == [' ', '']}
-          diff[:new].delete_if{|line| line == [' ', '']}
+
           diff[:old], diff[:new] = add_blank_lines(diff[:old], diff[:new])
         end
       end
@@ -263,10 +262,10 @@ module DiffJson
           new_item_lines.last[1] = "#{new_item_lines.last[1]}," if !last_loop and (new_item_lines.last[1].match(/[^\s]/))
         end
 
-        old_item_lines, new_item_lines = add_blank_lines(old_item_lines, new_item_lines)
-
         add_object_sub_diff_if_required(item_path, old_item, old_item_lines) if old_item.is_a?(Hash) and old_operator == '-'
         add_object_sub_diff_if_required(item_path, new_item, new_item_lines, :new) if new_item.is_a?(Hash) and new_operator == '+'
+
+        old_item_lines, new_item_lines = add_blank_lines(old_item_lines, new_item_lines)
 
         old_array_lines += old_item_lines
         new_array_lines += new_item_lines
