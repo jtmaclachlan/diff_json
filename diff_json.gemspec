@@ -1,8 +1,8 @@
 Gem::Specification.new do |spec|
   # Basic Gem Description
   spec.name          = "diff_json"
-  spec.version       = "0.1.3"
-  spec.date          = "2019-07-19"
+  spec.version       = "1.0.0"
+  spec.date          = "2019-08-06"
   spec.summary       = "Diffs two JSON objects and returns a left/right diff view, similar to the command line `diff` utility"
   spec.description   = spec.summary
   spec.authors       = ["Josh MacLachlan"]
@@ -11,4 +11,6 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
   spec.files         = Dir['lib/**/*.rb']
   spec.license       = "GPL-2"
+
+  spec.add_runtime_dependency 'require_all'
 end
