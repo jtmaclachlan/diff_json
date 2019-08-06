@@ -51,9 +51,9 @@ module DiffJson
         :right => ""
       }
 
-      markup[:full]  = "<table id=\"#{table_id_prefix}_full\" class=\"diff-json-full-view\">\n"
-      markup[:left]  = "<table id=\"#{table_id_prefix}_left\" class=\"diff-json-split-view-left\">\n"
-      markup[:right] = "<table id=\"#{table_id_prefix}_right\" class=\"diff-json-split-view-right\">\n"
+      markup[:full]  = "<table id=\"#{table_id_prefix}_full\" class=\"diff-json-view diff-json-full-view\">\n"
+      markup[:left]  = "<table id=\"#{table_id_prefix}_left\" class=\"diff-json-view diff-json-split-view-left\">\n"
+      markup[:right] = "<table id=\"#{table_id_prefix}_right\" class=\"diff-json-view diff-json-split-view-right\">\n"
 
       (0..(lines[:old].length - 1)).each do |i|
         # Full, combined table output
