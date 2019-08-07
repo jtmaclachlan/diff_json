@@ -23,7 +23,7 @@ module DiffJson
       new_markup = {main: table_markup(@diff, @opts[:table_id_prefix]), sub_diffs: {}}
 
       @diff.sub_diffs.each do |sdid, sub_diff|
-        new_markup[:sub_diffs][sdid] = table_markup(sub_diff, sdid)
+        new_markup[:sub_diffs][sdid] = HtmlOutput.new(sub_diff, @opts)
       end
 
       return new_markup
