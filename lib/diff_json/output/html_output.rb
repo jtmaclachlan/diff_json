@@ -186,23 +186,23 @@ module DiffJson
       (0..(left_lines.length - 1)).each do |i|
         compiled_lines[:left] << <<-EOL
           <div class="diff-json-view-line row">
-            <div class="diff-json-view-line-operator col-1"><pre>#{left_operators unless left_lines[i].empty?}</pre></div>
-            <div class="diff-json-view-line-content col-11"><pre class="diff-json-line-breaker">#{left_lines[i]}</pre></div>
+            <div class="diff-json-view-line-operator col-xs-1"><pre>#{left_operators unless left_lines[i].empty?}</pre></div>
+            <div class="diff-json-view-line-content col-xs-11"><pre class="diff-json-line-breaker #{highlight_class(left_operators) unless left_lines[i].empty?}">#{left_lines[i]}</pre></div>
           </div>
         EOL
         compiled_lines[:right] << <<-EOL
         <div class="diff-json-view-line row">
-          <div class="diff-json-view-line-operator col-1"><pre>#{right_operators unless right_lines[i].empty?}</pre></div>
-          <div class="diff-json-view-line-content col-11"><pre class="diff-json-line-breaker">#{right_lines[i]}</pre></div>
+          <div class="diff-json-view-line-operator col-xs-1"><pre>#{right_operators unless right_lines[i].empty?}</pre></div>
+          <div class="diff-json-view-line-content col-xs-11"><pre class="diff-json-line-breaker #{highlight_class(right_operators) unless right_lines[i].empty?}">#{right_lines[i]}</pre></div>
         </div>
         EOL
         compiled_lines[:full] << <<-EOL
         <div class="diff-json-view-line row">
-          <div class="diff-json-view-line-left col-6">
-            <pre class="diff-json-line-breaker">#{left_operators unless left_lines[i].empty?} #{left_lines[i]}</pre>
+          <div class="diff-json-view-line-left col-xs-6">
+            <pre class="diff-json-line-breaker #{highlight_class(left_operators) unless left_lines[i].empty?}">#{left_operators unless left_lines[i].empty?} #{left_lines[i]}</pre>
           </div>
-          <div class="diff-json-view-line-right col-6">
-            <pre class="diff-json-line-breaker">#{right_operators unless right_lines[i].empty?} #{right_lines[i]}</pre>
+          <div class="diff-json-view-line-right col-xs-6">
+            <pre class="diff-json-line-breaker #{highlight_class(right_operators) unless right_lines[i].empty?}">#{right_operators unless right_lines[i].empty?} #{right_lines[i]}</pre>
           </div>
         </div>
         EOL
@@ -218,6 +218,13 @@ module DiffJson
       compiled_lines[:full] = "</div>"
 
       return compiled_lines
+    end
+
+    def highlight_class(operators)
+      return '' if operators.empty?
+      return 'diff-json-content-ins' if operators.include?('+')
+      return 'diff-json-content-del' if operators.include?('-')
+      return 'diff-json-content-mov' if operators.include?('M')
     end
 
     def balance_output(old_element, new_element, indentation: 0, old_key: nil, new_key: nil, old_comma: false, new_comma: false)

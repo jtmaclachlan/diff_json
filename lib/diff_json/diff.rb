@@ -64,6 +64,8 @@ module DiffJson
       return case count_type
       when :ignore, :add, :replace, :remove, :move, :update
         @counts[count_type] || 0
+      when :total
+        @counts.values.sum
       else
         @counts
       end
