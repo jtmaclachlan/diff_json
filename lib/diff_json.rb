@@ -1,5 +1,4 @@
 require 'json'
-
-require_relative './diff_json/undefined_value'
+require 'require_all'
 require_relative './diff_json/diff'
-require_relative './diff_json/html_output'
+require_rel './diff_json/output'
