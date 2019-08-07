@@ -67,7 +67,7 @@ module DiffJson
           end
 
           if !old_element.nil? and !new_element.nil?
-            if (old_element[:value] == new_element[:value]) or (operations & [:ignore, :replace]).length > 0
+            if (old_element[:value] == new_element[:value]) or (operations & [:ignore, :replace]).length > 0 or (operations & [:send_move, :receive_move]).length == 2
               old_lines, new_lines = balance_output(old_element[:value], new_element[:value], indentation: old_element[:indentation], old_key: old_element[:key], new_key: new_element[:key], old_comma: old_element[:trailing_comma], new_comma: new_element[:trailing_comma])
               hierarchy_lock = path unless old_element[:type] == :primitive and new_element[:type] == :primitive
             else

@@ -1,7 +1,7 @@
 Gem::Specification.new do |spec|
   # Basic Gem Description
   spec.name          = "diff_json"
-  spec.version       = "1.0.0"
+  spec.version       = "1.0.1"
   spec.date          = "2019-08-07"
   spec.summary       = "Diffs two JSON objects and returns a left/right diff view, similar to the command line `diff` utility"
   spec.description   = spec.summary
