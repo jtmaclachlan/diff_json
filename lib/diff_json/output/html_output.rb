@@ -9,12 +9,12 @@ module DiffJson
       @markup = build
     end
 
-    def markup
-      return @markup
-    end
-
     def diff
       return @diff
+    end
+
+    def markup
+      return @markup
     end
 
     private

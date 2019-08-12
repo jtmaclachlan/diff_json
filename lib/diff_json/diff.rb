@@ -7,6 +7,16 @@ module DiffJson
     return case return_type
     when :raw
       completed_diff
+    when :patch
+      patch_operations = []
+
+      completed_diff.diff.each do |path, operations|
+        operations.each do |op|
+          patch_operations << op if [:add, :replace, :remove].include?(op[:op]) or (op[:op] == :move and path == op[:from])
+        end
+      end
+
+      return patch_operations
     when :html
       HtmlOutput.new(completed_diff, **output_opts)
     end
@@ -41,12 +51,23 @@ module DiffJson
       @sub_diffs = generate_sub_diffs
     end
 
-    def json_map(version = :old)
-      return (version == :old ? @old_map : @new_map)
+    def count(count_type = :all)
+      return case count_type
+      when :ignore, :add, :replace, :remove, :move, :update
+        @counts[count_type] || 0
+      when :total
+        @counts.values.sum
+      else
+        @counts
+      end
     end
 
     def diff
       return @diff
+    end
+
+    def json_map(version = :old)
+      return (version == :old ? @old_map : @new_map)
     end
 
     def paths(version = :joint)
@@ -57,17 +78,6 @@ module DiffJson
         json_map(:new).keys
       else
         @all_paths
-      end
-    end
-
-    def count(count_type = :all)
-      return case count_type
-      when :ignore, :add, :replace, :remove, :move, :update
-        @counts[count_type] || 0
-      when :total
-        @counts.values.sum
-      else
-        @counts
       end
     end
 
