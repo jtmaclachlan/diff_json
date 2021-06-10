@@ -117,6 +117,21 @@ Examples:
 * Specifies whether to add a count for structures whose sub-elements were changed
 * Default: `false`
 
+### `replace_primitives_arrays`
+
+* Specifies whether arrays containing only primitive values in both JSON objects should be replaced wholesale, or individually patched
+* Default: `false`
+
+### `logger`
+
+* Accepts an instance of `Logger` to use for logging gem execution messages
+* Default: `Logger.new(STDOUT)`
+
+### `log_level`
+
+* Specifies level of detail to log, accepts `[:debug, :info, :warn, :error]`
+* Default: `:warn`
+
 ## Diff Instance Methods
 
 * `#count(count_type = :all)`

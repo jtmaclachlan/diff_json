@@ -31,6 +31,13 @@ module JsonDiffing
     add_drop_operations = {}
     last_shared_index = (old_array.length - 1)
 
+    if @opts[:replace_primitives_arrays]
+      if @old_map[base_path][:array_type] == :primitives and @new_map[base_path][:array_type] == :primitives
+        diff_operations[base_path] = [{op: :replace, path: base_path, from: old_array, value: new_array}]
+        return diff_operations
+      end
+    end
+
     if @opts[:track_array_moves]
       old_array_map   = old_array.each_with_index.map{|v,i| [i, v]}
       new_array_map   = new_array.each_with_index.map{|v,i| [i, v]}
@@ -64,7 +71,7 @@ module JsonDiffing
       last_shared_index = new_array.length - 1
 
       old_array[(new_array.length)..(old_array.length - 1)].each_with_index do |value, i|
-        element_index = ((old_array.length - 1) + i)
+        element_index = (new_array.length + i)
         element_path = "#{base_path}/#{element_index}"
         add_drop_operations[element_path] = [{op: :remove, path: element_path, value: old_array[element_index]}]
 
