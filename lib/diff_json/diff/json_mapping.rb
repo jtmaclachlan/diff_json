@@ -48,9 +48,26 @@ module JsonMapping
     return gathered_paths
   end
 
+  def is_structure?(value)
+    return (value.is_a?(Array) or value.is_a?(Hash))
+  end
+
   def element_metadata(path, value, **overrides)
     hash_list    = (value.is_a?(Array) ? value.map{|x| x.hash} : [])
-    is_structure = (value.is_a?(Array) or value.is_a?(Hash))
+    is_structure = is_structure?(value)
+    array_type   = nil
+
+    if is_structure and value.is_a?(Array)
+      structure_detection = value.map{|v| is_structure?(v)}.uniq
+
+      array_type = if structure_detection.empty?
+        :empty
+      elsif structure_detection.length > 1
+        :mixed
+      else
+        (structure_detection.first ? :structures : :primitives)
+      end
+    end
 
     return {
       :hash_list      => hash_list,
@@ -60,6 +77,7 @@ module JsonMapping
       :length         => (is_structure ? value.length : nil),
       :trailing_comma => false,
       :type           => (is_structure ? value.class.name.downcase.to_sym : :primitive),
+      :array_type     => array_type,
       :value          => value
     }.merge(overrides)
   end

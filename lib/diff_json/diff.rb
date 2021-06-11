@@ -36,7 +36,10 @@ module DiffJson
         path_sort: :sorted,
         sub_diffs: {},
         track_array_moves: true,
-        track_structure_updates: false
+        track_structure_updates: false,
+        replace_primitives_arrays: false,
+        logger: ::Logger.new(STDOUT),
+        log_level: :warn
       }.merge(opts)
       # Create map of both JSON objects
       @old_map = map_json(old_json, '', 0)
@@ -83,6 +86,19 @@ module DiffJson
 
     def sub_diffs
       return @sub_diffs
+    end
+
+    def log_message(log_level, message)
+      log_levels = [
+        :debug,
+        :info,
+        :warn,
+        :error
+      ]
+
+      if (log_levels.index(log_level) || -1) >= (log_levels.index(@opts[:log_level]) || 0)
+        @opts[:logger].method(log_level).call((is_structure?(message) ? JSON.pretty_generate(message) : message))
+      end
     end
   end
 end
