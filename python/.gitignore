@@ -1,0 +1,7 @@
+.python-version
+.env*
+libtest.*
+*.json
+**/__pycache__
+build/
+kudzu.egg-info/
