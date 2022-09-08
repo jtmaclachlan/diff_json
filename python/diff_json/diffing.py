@@ -43,6 +43,14 @@ class JSONDiff:
                     logger.debug("REMOVED")
                     self.__handle_removed_element(xpath)
 
+    def get_patch(self):
+        patch = []
+
+        for xpath in self.diff:
+            patch.extend(self.diff[xpath])
+
+        return patch
+
     def __gather_paths(self):
         omxs = set(self.old_map.xpaths())
         nmxs = set(self.new_map.xpaths())
@@ -55,7 +63,7 @@ class JSONDiff:
 
         for xpath in ordered:
             for ipath in self.ignore_paths:
-                if ipath.matches(xpath):
+                if ipath.matches_path(xpath):
                     ignored.add(xpath)
                     break
 
@@ -63,8 +71,7 @@ class JSONDiff:
 
     def __add_element_sub_path_ignores(self, xpath):
         logger.debug(f"Add sub-element ignores for {xpath}/**")
-        new_match = XPathMatch(xpath.segments, "**")
-        new_ignored = [ipath for ipath in self.ordered if new_match.matches(ipath)]
+        new_ignored = xpath.to_match("**").find_matches(self.ordered)
         self.ignored = self.ignored | set(new_ignored)
 
     def __get_shared_path_elements(self, xpath):
@@ -85,10 +92,31 @@ class JSONDiff:
             self.diff[xpath] = [operation]
 
     def __replace_array(self, old_array, new_array):
-        return self.replace_primitives_arrays and old_array.array_type == "primitives" and new_array.array_type == "primitives"
+        return self.replace_primitives_arrays \
+               and old_array.array_type == "primitives" \
+               and new_array.array_type == "primitives"
 
     def __find_array_moves(self, xpath, old_array, new_array):
-        pass
+        index_paths = xpath.to_match("*").find_matches(self.ordered)
+        logger.debug(list(map(str, index_paths)))
+        old_elements = set(self.old_map.get_elements(index_paths))
+        new_elements = set(self.new_map.get_elements(index_paths))
+        shared_elements = (old_elements & new_elements)
+        old_move_check = sorted(old_elements - shared_elements)
+        new_move_check = new_elements - shared_elements
+        print(old_move_check)
+        print(new_move_check)
+        max_possible_moves = min(len(old_move_check), len(new_move_check))
+
+        if max_possible_moves > 0:
+            found_movements = [{'old': oe, 'new': ne}
+                               for oe in old_move_check
+                               for ne in new_move_check
+                               if oe.value_hash == ne.value_hash]
+
+            for move in found_movements:
+                self.__register_operation()
+            print(found_movements)
     
     def __diff_element(self, xpath):
         elements = self.__get_shared_path_elements(xpath)
