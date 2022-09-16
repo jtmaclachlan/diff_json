@@ -3,7 +3,7 @@ from functools import total_ordering
 
 
 class Path(ABC):
-    __slots__ = ["segments", "path", "hash", "sort_key"]
+    __slots__ = ["id", "segments", "path", "hash"]
 
     def __init__(self, path_segments):
         self.segments = path_segments
@@ -32,7 +32,7 @@ class Path(ABC):
 class XPath(Path):
     def __init__(self, path_segments):
         super().__init__(path_segments)
-        self.sort_key = self.__build_sort_key()
+        self.id = self.__build_id()
 
     # Required to explicity set the __hash__ method on any class that defines the __eq__ method.
     # It will not implicitly inherit the parent class's __hash__ method
@@ -42,10 +42,10 @@ class XPath(Path):
         return self.path
 
     def __eq__(self, other):
-        return self.sort_key == other.sort_key
+        return self.id == other.id
 
     def __lt__(self, other):
-        return self.sort_key < other.sort_key
+        return self.id < other.id
 
     @classmethod
     def from_path_string(cls, path_string):
@@ -64,7 +64,7 @@ class XPath(Path):
     def to_match(self, wildcard=None):
         return XPathMatch(self.segments, wildcard or "")
 
-    def __build_sort_key(self):
+    def __build_id(self):
         segment_keys = []
 
         for segment in self.segments:
@@ -82,7 +82,7 @@ class XPathMatch(Path):
     def __init__(self, path_segments, wildcard=None):
         super().__init__(path_segments)
         self.wildcard = wildcard or ''
-        self.sort_key = self.__build_sort_key()
+        self.id = self.__build_id()
 
     def __str__(self):
         return f"{self.path}/{self.wildcard}"
@@ -112,7 +112,7 @@ class XPathMatch(Path):
     def find_matches(self, xpaths):
         return [xpath for xpath in xpaths if self.matches_path(xpath)]
 
-    def __build_sort_key(self):
+    def __build_id(self):
         segment_keys = []
 
         for segment in self.segments:
