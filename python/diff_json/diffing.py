@@ -1,6 +1,6 @@
 import logging
 from .mapping import JSONMap
-from .xpath import XPathMatch
+from .pathfinding import XPathMatch
 
 
 logger = logging.getLogger("diff_json")
