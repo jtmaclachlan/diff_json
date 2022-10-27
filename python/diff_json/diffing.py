@@ -1,6 +1,5 @@
 import logging
 from .mapping import JSONMap
-from .op_timer import time_operation
 from .xpath import XPathMatch
 
 
@@ -33,15 +32,14 @@ class JSONDiff:
         self.diff = {}
 
     def run(self):
-        with time_operation("find_diff"):
-            for xpath in self.ordered:
-                if xpath not in self.ignored:
-                    if xpath in self.shared:
-                        self.__diff_element(xpath)
-                    elif xpath in self.added:
-                        self.__handle_added_element(xpath)
-                    else:
-                        self.__handle_removed_element(xpath)
+        for xpath in self.ordered:
+            if xpath not in self.ignored:
+                if xpath in self.shared:
+                    self.__diff_element(xpath)
+                elif xpath in self.added:
+                    self.__handle_added_element(xpath)
+                else:
+                    self.__handle_removed_element(xpath)
 
     def get_patch(self):
         patch = []
@@ -121,11 +119,10 @@ class JSONDiff:
         max_possible_moves = min(len(old_move_check), len(new_move_check))
 
         if max_possible_moves > 0:
-            with time_operation("tam_comprehend_moves"):
-                found_movements = [{'old': oe, 'new': ne}
-                                   for oe in old_move_check
-                                   for ne in new_move_check
-                                   if oe.value_hash == ne.value_hash]
+            found_movements = [{'old': oe, 'new': ne}
+                               for oe in old_move_check
+                               for ne in new_move_check
+                               if oe.value_hash == ne.value_hash]
 
             for move in found_movements:
                 self.__register_operation(move['old'].xpath, "send")
