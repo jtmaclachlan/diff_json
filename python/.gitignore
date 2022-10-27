@@ -4,4 +4,5 @@ libtest.*
 *.json
 **/__pycache__
 build/
-kudzu.egg-info/
+dist/
+*.egg-info/

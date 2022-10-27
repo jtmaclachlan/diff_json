@@ -23,6 +23,7 @@ class JSONElement:
 
         self.value_hash = self.__hash_value()
         self.id = f"{self.xpath.id}|{self.value_hash:016x}"
+        self.length = 0 if self.json_type == "primitive" else len(self.value)
         self.array_type = self.__get_array_type(self.json_type, self.value)
         self.object_keys = self.__get_object_keys(self.json_type, self.value)
         self.length = 0 if self.json_type == "primitive" else len(self.value)
