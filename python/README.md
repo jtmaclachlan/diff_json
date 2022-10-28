@@ -24,7 +24,9 @@ with open("new_version.json") as nv:
 # new_json = {'a': 2, 'b': 77}
 
 diff = JSONDiff(old_json, new_json)
-print(json.dumps(diff.get_patch(), indent=2))
+diff.run()
+patch_data = diff.get_patch()
+print(json.dumps(patch_data, indent=2))
 
 """
 [
@@ -42,7 +44,9 @@ print(json.dumps(diff.get_patch(), indent=2))
 """
 ```
 
-## Classes / Processes
+*NOTE: The value of `patch_data` above will be used in examples below.*
+
+## Classes by process section
 
 ### Pathfinding
 
@@ -58,7 +62,7 @@ xpath2 = XPath.from_string("/1/op")
 ```
 
 Represents an XPath as a `list` of segments, such as `[1, "op"]`. When cast to a string, it will output the proper XPath
-`/1/op`. Each XPath has an ID string representing the structure, allowing for a list of XPath objects to be sorted.
+`"/1/op"`. Each XPath has an ID string representing the structure, allowing for a list of XPath objects to be sorted.
 
 #### diff_json.pathfinding.XPathMatch
 
@@ -76,4 +80,41 @@ all descendants.
 
 ### Mapping
 
+JSON documents passed in for diffing are first mapped into a listing of XPaths pointing to a representative object.
+While slower in finding the difference, this process greatly increases the speed of creating output data.
 
+#### diff_json.mapping.JSONElement
+
+```python
+from diff_json.pathfinding import XPath
+from diff_json.mapping import JSONElement
+xpath = XPath([1, "op"])
+element = JSONElement(xpath, patch_data[1]['op'])
+```
+
+Represents a single value within a JSON document, and holds a variety of metadata about that element.
+
+#### diff_json.mapping.JSONMap
+
+```python
+from diff_json.mapping import JSONMap
+map = JSONMap(patch_data)
+```
+
+This map of the entire JSON document holds a listing of all XPaths discovered, pointing to their respective JSONElement.
+
+### Diffing
+
+#### diff_json.diffing.JSONDiff
+
+```python
+from diff_json.diffing import JSONDiff
+diff = JSONDiff([], patch_data)
+```
+
+The diff itself. During initialization, the two JSON documents will be passed to create two JSONMap objects. The diff is
+not calculated immediately, but only once `diff.run()` is called. Once calculated, a patch document can be obtained by
+calling `diff.get_patch()`, or it can be passed to an output generator. The JSONDiff constructor takes a number of
+parameters that determine how the diff is executed: any paths that are ignored from diffing, which paths to count
+as a diff operation, whether to track movement of elements within an array, etc. See the class docstring for complete
+information.
