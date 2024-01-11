@@ -11,7 +11,7 @@ class JSONDiff:
     Contains two JSON documents, their maps, and the differences between them
 
     :param old_json: JSON document as a string or Python structure, the old (left side) doc
-    :param new_json: JSON document as a string or Python structure, the old (left side) doc
+    :param new_json: JSON document as a string or Python structure, the new (right side) doc
     :param ignore_paths: (optional, default `None`) a sequence or set of XPath strings with optional wildcards, which
         will be skipped during the diff process. Each element is converted to an XPathMatch object.
         Example value: `["/components/**"]`, which indicates that all descendants of `json['components']` will not have
@@ -21,7 +21,7 @@ class JSONDiff:
         that all paths in the document will have add, remove, replace, move, and update operations counted.
         Example value: `{"/components/*": ("add", "remove", "replace")}`, which indicates that only the addition,
         removal, or replacing of the direct children of `json['components']` will be reflected in the operation count
-    :param track_array_moves: (optional, default `True) indicates whether to track the movement of identical values
+    :param track_array_moves: (optional, default `True`) indicates whether to track the movement of identical values
         within an array. Note that for very large arrays, this can drastically increase processing time
     :param max_array_tracking_length: (optional, default `None`) if `track_array_moves` is enabled, and an integer value
         is provided here, only arrays of that length or less will have movements tracked
