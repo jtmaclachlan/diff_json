@@ -12,5 +12,5 @@ def time_operation(label):
         yield start_time
     finally:
         end_time = time.time()
-        ex_time = start_time - end_time
+        ex_time = end_time - start_time
         logger.debug(f"{label} Execution Time: {round(ex_time, 6):.6f}s")

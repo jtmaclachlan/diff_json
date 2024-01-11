@@ -2,7 +2,7 @@ import json
 import logging
 from .utility import is_json_structure, py_to_json_type
 from .exceptions import InvalidJSONDocument, JSONStructureError
-from .xpath import XPath
+from .pathfinding import XPath
 
 
 logger = logging.getLogger("diff_json")
