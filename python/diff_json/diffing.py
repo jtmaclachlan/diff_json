@@ -98,7 +98,7 @@ class JSONDiff:
         new_ignored = xpath.to_match("**").find_matches(self.ordered)
         self.ignored = self.ignored | set(new_ignored)
 
-    def __get_shared_path_elements(self, xpath):
+    def _get_shared_path_elements(self, xpath):
         return {
             'old': self.old_map[xpath],
             'new': self.new_map[xpath]
@@ -154,8 +154,8 @@ class JSONDiff:
                 self.__register_operation(move['new'].xpath, "move", from_path=move['old'].xpath)
     
     def __diff_element(self, xpath):
-        elements = self.__get_shared_path_elements(xpath)
-        diff_type = self.__get_diff_type(elements)
+        elements = self._get_shared_path_elements(xpath)
+        diff_type = self._get_diff_type(elements)
 
         match diff_type:
             case "equal":
@@ -163,7 +163,6 @@ class JSONDiff:
                     self.__add_element_sub_path_ignores(xpath)
             case "replace":
                 self.__register_operation(xpath, "replace", value=elements['new'].value)
-
                 if elements['old'].json_type != "primitive" or elements['new'].json_type != "primitive":
                     self.__add_element_sub_path_ignores(xpath)
             case "diff/array":
@@ -198,7 +197,7 @@ class JSONDiff:
             self.__add_element_sub_path_ignores(xpath)
 
     @staticmethod
-    def __get_diff_type(elements):
+    def _get_diff_type(elements):
         if elements['old'] == elements['new']:
             return "equal"
 

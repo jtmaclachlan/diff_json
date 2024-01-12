@@ -88,7 +88,7 @@ class JSONMap:
         self.map_element(json_document, XPath([]))
 
     def __str__(self):
-        return f"<JSONMap {self.map[0].value_hash} || {len(self.map) - 1} element(s)>"
+        return f"<JSONMap {self[XPath('')].value_hash} || {len(self.map) - 1} element(s)>"
 
     def __getitem__(self, item):
         if item in self.map:
